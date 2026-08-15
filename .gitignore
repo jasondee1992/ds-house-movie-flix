@@ -1,1 +1,12 @@
-.idea
+.idea/
+.gradle/
+**/build/
+local.properties
+*.iml
+*.py[cod]
+__pycache__/
+.pytest_cache/
+.test-tmp/
+.venv/
+backend/*.db
+backend/.env
