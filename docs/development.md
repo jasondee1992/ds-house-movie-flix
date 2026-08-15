@@ -1,11 +1,11 @@
-# HomeFlix Phase 2 development
+# HomeFlix Phase 4 development
 
 ## Configure and run the backend
 
 Create `backend/.env` from `.env.example` and set an external movie folder:
 
 ```env
-HOMEFLIX_MEDIA_DIR=E:\MOVIES
+HOMEFLIX_MEDIA_DIR=F:\MOVIES
 HOMEFLIX_DATABASE_URL=sqlite:///./homeflix.db
 ```
 
@@ -63,4 +63,4 @@ cd backend
 ..\.venv\Scripts\python.exe -m pytest -q --basetemp=.test-tmp
 ```
 
-**Video playback is NOT implemented in Phase 2.** The disabled details action makes that limitation explicit.
+The player uses Media3 ExoPlayer. D-pad Center operates native play/pause controls, LEFT/RIGHT seek 10 seconds while controls are visible, and Back hides controls before returning to Details. Sidecar subtitle and embedded audio/text tracks appear in Media3's controller settings when supported.

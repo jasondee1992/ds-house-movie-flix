@@ -1,6 +1,6 @@
 # HomeFlix API
 
-The Phase 3 API scans external media directories and stores library, artwork, subtitle, and optional ffprobe metadata in SQLite. Media files are always treated as read-only.
+The Phase 4 API scans external media directories and provides safe ID-based direct streaming for movies and sidecar subtitles. Media files are always treated as read-only.
 
 ## Setup
 
@@ -45,6 +45,12 @@ The video's parent folder is its primary media directory. A terminal parenthesiz
 When `ffprobe` is on `PATH`, scans also collect duration, dimensions, codecs, channels, bitrate, frame rate, and container. If it is absent or a file cannot be probed, scanning continues and those nullable fields remain empty.
 
 Existing Phase 2 databases are upgraded additively at startup. Movie rows and IDs are retained; nullable media columns and the `subtitles` table are added without recreation.
+
+## Streaming
+
+`GET /api/movies/{movie_id}/stream` supports full responses and single HTTP byte ranges. `HEAD` returns the same useful size, MIME, and `Accept-Ranges` headers without a body. Invalid or unsatisfiable ranges return `416` with `Content-Range: bytes */TOTAL`. Movie data is read in bounded 1 MiB chunks and is never loaded entirely into memory.
+
+Sidecar subtitles are available at `GET /api/movies/{movie_id}/subtitles/{subtitle_id}`. Both endpoints resolve database-owned paths and confirm the canonical file remains inside a configured media root. Neither accepts client-provided paths or exposes absolute paths.
 
 ## Tests
 

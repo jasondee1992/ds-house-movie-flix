@@ -1,6 +1,6 @@
 # HomeFlix
 
-HomeFlix is a local-network, television-first media library. Phase 3 adds a backdrop-driven TV hero and details experience, local artwork/subtitle discovery, and optional ffprobe technical metadata.
+HomeFlix is a local-network, television-first media library. Phase 4 adds direct HTTP Range streaming and fullscreen Media3 playback with local sidecar subtitles.
 
 ## Repository layout
 
@@ -8,7 +8,7 @@ HomeFlix is a local-network, television-first media library. Phase 3 adds a back
 - `backend/` — FastAPI, SQLAlchemy, SQLite, scanner, and tests
 - `docs/` — development and emulator instructions
 
-## Phase 3 quick start
+## Phase 4 quick start
 
 ```powershell
 python -m venv .venv
@@ -35,10 +35,11 @@ The APK is generated at `android-tv/app/build/outputs/apk/debug/app-debug.apk`. 
 
 See [backend/README.md](backend/README.md) and [docs/development.md](docs/development.md) for complete configuration and test instructions.
 
-## Phase 3 limitations
+## Phase 4 limitations
 
 - No TMDB, scraping, or external metadata provider is used; missing descriptions and genres stay empty.
 - Technical fields remain empty when `ffprobe` is unavailable.
 - Library scanning is manually triggered through the API.
-- Profiles, favorites, subtitle streaming, and watch history are future work.
-- **Video playback is NOT implemented in Phase 3.** The Play action is an explicit Phase 4 placeholder.
+- Profiles, favorites, persistent playback history, and watch history are future work.
+- Playback is direct-play only: HomeFlix does not transcode unsupported codecs or containers.
+- Embedded tracks are exposed by Media3 when the container/device decoder supports them; the backend does not extract tracks.

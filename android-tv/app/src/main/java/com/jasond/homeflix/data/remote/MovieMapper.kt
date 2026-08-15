@@ -14,6 +14,7 @@ fun MovieDto.toDomain(): Movie = Movie(
     genre = genre,
     posterUrl = poster_url?.let(::resolveApiUrl),
     backdropUrl = backdrop_url?.let(::resolveApiUrl),
+    streamUrl = resolveApiUrl(stream_url),
     fileExtension = file_extension,
     fileSize = file_size,
     dateAdded = date_added,
@@ -24,7 +25,10 @@ fun MovieDto.toDomain(): Movie = Movie(
     audioCodec = audio_codec,
     audioChannels = audio_channels,
     subtitleCount = subtitle_count,
-    subtitles = subtitles.map { Subtitle(it.id, it.language, it.format, it.is_default) },
+    subtitles = subtitles.map {
+        Subtitle(it.id, it.language, it.format, it.is_default,
+            resolveApiUrl(it.url.ifBlank { "/api/movies/$id/subtitles/${it.id}" }))
+    },
 )
 
 internal fun resolveApiUrl(url: String): String = runCatching {

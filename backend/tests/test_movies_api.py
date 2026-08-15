@@ -25,6 +25,7 @@ def test_scan_and_movie_endpoints(client: TestClient, media_dir: Path) -> None:
     assert details.status_code == 200
     assert details.json()["poster_url"] == f"/api/movies/{movie_id}/poster"
     assert details.json()["backdrop_url"] == f"/api/movies/{movie_id}/backdrop"
+    assert details.json()["stream_url"] == f"/api/movies/{movie_id}/stream"
     assert details.json()["subtitle_count"] == 0
     assert "F:\\" not in str(details.json())
 

@@ -23,10 +23,14 @@ class MovieMapperTest {
             file_extension = ".mkv",
             file_size = 42,
             date_added = "2026-08-15T12:00:00Z",
+            stream_url = "/api/movies/7/stream",
+            subtitles = listOf(SubtitleDto(31, "English", "srt", false, "/api/movies/7/subtitles/31")),
         ).toDomain()
 
         assertEquals(7L, movie.id)
         assertEquals(10_140L, movie.durationSeconds)
         assertEquals(".mkv", movie.fileExtension)
+        assertEquals("http://10.0.2.2:8000/api/movies/7/stream", movie.streamUrl)
+        assertEquals("http://10.0.2.2:8000/api/movies/7/subtitles/31", movie.subtitles.single().url)
     }
 }

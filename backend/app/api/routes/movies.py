@@ -1,13 +1,15 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.dependencies import get_session
-from app.models.movie import Movie
+from app.models.movie import Movie, Subtitle
 from app.schemas.movie import MovieResponse, SubtitleResponse
+from app.services.media_stream import (ByteRange, InvalidRange, iter_file_range, parse_range_header,
+    resolve_trusted_file, subtitle_content_type, video_content_type)
 
 router = APIRouter(prefix="/movies", tags=["movies"])
 
@@ -25,11 +27,13 @@ def quality_label(width: int | None, height: int | None) -> str | None:
 
 
 def to_response(movie: Movie) -> MovieResponse:
-    subtitles = [SubtitleResponse.model_validate(item) for item in movie.subtitles]
+    subtitles = [SubtitleResponse(id=item.id, language=item.language, format=item.format,
+        is_default=item.is_default, url=f"/api/movies/{movie.id}/subtitles/{item.id}") for item in movie.subtitles]
     return MovieResponse(
         id=movie.id, title=movie.title, year=movie.year, duration_seconds=movie.duration_seconds,
         description=movie.description, genre=movie.genre,
         poster_url=f"/api/movies/{movie.id}/poster", backdrop_url=f"/api/movies/{movie.id}/backdrop",
+        stream_url=f"/api/movies/{movie.id}/stream",
         file_extension=movie.file_extension, file_size=movie.file_size, date_added=movie.date_added,
         video_width=movie.video_width, video_height=movie.video_height,
         quality=quality_label(movie.video_width, movie.video_height), video_codec=movie.video_codec,
@@ -78,3 +82,62 @@ def get_poster(movie_id: int, session: Session = Depends(get_session)) -> FileRe
 @router.get("/{movie_id}/backdrop", response_model=None)
 def get_backdrop(movie_id: int, session: Session = Depends(get_session)) -> FileResponse:
     return _image(movie_id, "backdrop_path", session)
+
+
+def _trusted_movie(movie_id: int, request: Request, session: Session) -> tuple[Movie, Path]:
+    movie = session.get(Movie, movie_id)
+    if movie is None:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    path = resolve_trusted_file(movie.file_path, request.app.state.settings.media_dirs)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Movie file unavailable")
+    return movie, path
+
+
+def _stream_response(path: Path, range_header: str | None, head: bool = False) -> Response:
+    size = path.stat().st_size
+    headers = {"Accept-Ranges": "bytes"}
+    status_code = 200
+    byte_range = ByteRange(0, max(0, size - 1))
+    if range_header:
+        try:
+            byte_range = parse_range_header(range_header, size)
+        except InvalidRange:
+            return Response(status_code=416, headers={"Accept-Ranges": "bytes", "Content-Range": f"bytes */{size}"})
+        status_code = 206
+        headers["Content-Range"] = f"bytes {byte_range.start}-{byte_range.end}/{size}"
+    headers["Content-Length"] = str(byte_range.length if size else 0)
+    content_type = video_content_type(path)
+    if head:
+        return Response(status_code=status_code, headers=headers, media_type=content_type)
+    return StreamingResponse(iter_file_range(path, byte_range), status_code=status_code,
+                             headers=headers, media_type=content_type)
+
+
+@router.get("/{movie_id}/stream", response_model=None)
+def stream_movie(movie_id: int, request: Request, range_header: str | None = Header(None, alias="Range"),
+                 session: Session = Depends(get_session)) -> Response:
+    _, path = _trusted_movie(movie_id, request, session)
+    return _stream_response(path, range_header)
+
+
+@router.head("/{movie_id}/stream", response_model=None)
+def head_movie(movie_id: int, request: Request, range_header: str | None = Header(None, alias="Range"),
+               session: Session = Depends(get_session)) -> Response:
+    _, path = _trusted_movie(movie_id, request, session)
+    return _stream_response(path, range_header, head=True)
+
+
+@router.get("/{movie_id}/subtitles/{subtitle_id}", response_model=None)
+def stream_subtitle(movie_id: int, subtitle_id: int, request: Request,
+                    session: Session = Depends(get_session)) -> FileResponse:
+    movie = session.get(Movie, movie_id)
+    if movie is None:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    subtitle = session.get(Subtitle, subtitle_id)
+    if subtitle is None or subtitle.movie_id != movie_id:
+        raise HTTPException(status_code=404, detail="Subtitle not found")
+    path = resolve_trusted_file(subtitle.file_path, request.app.state.settings.media_dirs)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Subtitle file unavailable")
+    return FileResponse(path, media_type=subtitle_content_type(path), filename=subtitle.file_name)

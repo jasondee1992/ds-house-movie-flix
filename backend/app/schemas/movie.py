@@ -8,6 +8,7 @@ class SubtitleResponse(BaseModel):
     language: str
     format: str
     is_default: bool
+    url: str
 
 
 class MovieResponse(BaseModel):
@@ -20,6 +21,7 @@ class MovieResponse(BaseModel):
     genre: str | None
     poster_url: str
     backdrop_url: str
+    stream_url: str
     file_extension: str
     file_size: int
     date_added: datetime

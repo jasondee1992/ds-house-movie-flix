@@ -13,6 +13,7 @@ data class MovieDto(
     val genre: String?,
     val poster_url: String?,
     val backdrop_url: String? = null,
+    val stream_url: String = "/api/movies/$id/stream",
     val file_extension: String?,
     val file_size: Long?,
     val date_added: String?,
@@ -26,7 +27,10 @@ data class MovieDto(
     val subtitles: List<SubtitleDto> = emptyList(),
 )
 
-data class SubtitleDto(val id: Long, val language: String, val format: String, val is_default: Boolean)
+data class SubtitleDto(
+    val id: Long, val language: String, val format: String, val is_default: Boolean,
+    val url: String = "",
+)
 
 interface ApiService {
     @GET("api/health")
