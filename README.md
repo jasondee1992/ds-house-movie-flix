@@ -1,6 +1,6 @@
 # HomeFlix
 
-HomeFlix is a local-network, television-first media library. Phase 4 adds direct HTTP Range streaming and fullscreen Media3 playback with local sidecar subtitles.
+HomeFlix is a local-network, television-first media library. Phase 5 adds persistent playback progress, resume/start-over playback, and a Continue Watching TV row.
 
 ## Repository layout
 
@@ -8,7 +8,7 @@ HomeFlix is a local-network, television-first media library. Phase 4 adds direct
 - `backend/` — FastAPI, SQLAlchemy, SQLite, scanner, and tests
 - `docs/` — development and emulator instructions
 
-## Phase 4 quick start
+## Phase 5 quick start
 
 ```powershell
 python -m venv .venv
@@ -35,11 +35,14 @@ The APK is generated at `android-tv/app/build/outputs/apk/debug/app-debug.apk`. 
 
 See [backend/README.md](backend/README.md) and [docs/development.md](docs/development.md) for complete configuration and test instructions.
 
-## Phase 4 limitations
+## Phase 5 behavior and limitations
 
 - No TMDB, scraping, or external metadata provider is used; missing descriptions and genres stay empty.
 - Technical fields remain empty when `ffprobe` is unavailable.
 - Library scanning is manually triggered through the API.
-- Profiles, favorites, persistent playback history, and watch history are future work.
+- Progress is stored per movie for the current single-user setup. Profiles, favorites, ratings, and multi-user history remain future work.
+- Movies become completed at 90% watched and leave Continue Watching. Items under 30 seconds are omitted.
+- Active playback saves every 15 seconds and on pause, backgrounding, disposal, and Back.
 - Playback is direct-play only: HomeFlix does not transcode unsupported codecs or containers.
 - Embedded tracks are exposed by Media3 when the container/device decoder supports them; the backend does not extract tracks.
+- Known pre-existing issue: video playback works on Google TV emulator, but audio output remains unverified/unresolved.

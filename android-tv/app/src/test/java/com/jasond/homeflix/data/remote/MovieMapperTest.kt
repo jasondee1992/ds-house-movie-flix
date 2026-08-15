@@ -2,6 +2,7 @@ package com.jasond.homeflix.data.remote
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.Assert.assertFalse
 
 class MovieMapperTest {
     @Test
@@ -32,5 +33,16 @@ class MovieMapperTest {
         assertEquals(".mkv", movie.fileExtension)
         assertEquals("http://10.0.2.2:8000/api/movies/7/stream", movie.streamUrl)
         assertEquals("http://10.0.2.2:8000/api/movies/7/subtitles/31", movie.subtitles.single().url)
+    }
+
+    @Test
+    fun `continue watching transport maps movie and progress`() {
+        val dto = MovieDto(3, "Movie", 2026, 100, null, null, null,
+            file_extension = ".mkv", file_size = 10, date_added = null)
+        val item = ContinueWatchingDto(dto, 40_000, 100_000, 40.0, "2026-08-15T12:00:00Z").toDomain()
+        assertEquals(3L, item.movie.id)
+        assertEquals(40_000L, item.progress.positionMs)
+        assertEquals(40.0, item.progress.progressPercent, 0.0)
+        assertFalse(item.progress.completed)
     }
 }

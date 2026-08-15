@@ -1,4 +1,4 @@
-# HomeFlix Phase 4 development
+# HomeFlix Phase 5 development
 
 ## Configure and run the backend
 
@@ -64,3 +64,9 @@ cd backend
 ```
 
 The player uses Media3 ExoPlayer. D-pad Center operates native play/pause controls, LEFT/RIGHT seek 10 seconds while controls are visible, and Back hides controls before returning to Details. Sidecar subtitle and embedded audio/text tracks appear in Media3's controller settings when supported.
+
+Playback progress is persisted in SQLite through `GET`, `PUT`, and `DELETE /api/movies/{id}/progress`.
+`GET /api/continue-watching` returns incomplete items with at least 30 seconds watched, newest first.
+Completion is calculated by the backend at 90%; the player saves every 15 seconds plus lifecycle and exit saves.
+
+Known pre-existing issue: video playback works on Google TV emulator, but audio output remains unverified/unresolved.

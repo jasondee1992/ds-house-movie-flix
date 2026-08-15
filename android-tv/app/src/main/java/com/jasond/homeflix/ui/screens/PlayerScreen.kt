@@ -12,11 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,6 +21,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -33,42 +32,69 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import com.jasond.homeflix.data.model.Movie
+import com.jasond.homeflix.ui.PlayerProgressState
+import com.jasond.homeflix.ui.PlayerViewModel
 import com.jasond.homeflix.ui.player.buildMediaItem
-import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.delay
+
+private const val PROGRESS_SAVE_INTERVAL_MS = 15_000L
 
 @OptIn(UnstableApi::class)
 @Composable
-fun PlayerScreen(movie: Movie?, onBack: () -> Unit) {
+fun PlayerScreen(movie: Movie?, onBack: () -> Unit, progressViewModel: PlayerViewModel = viewModel()) {
     if (movie == null) {
         PlayerUnavailable(onBack)
         return
     }
+    val progressState by progressViewModel.state.collectAsStateWithLifecycle()
+    when (val state = progressState) {
+        PlayerProgressState.Loading -> Box(Modifier.fillMaxSize().background(Color.Black),
+            contentAlignment = Alignment.Center) { Text("Loading movie...", fontSize = 22.sp) }
+        is PlayerProgressState.Ready -> PlaybackPlayer(movie, state.initialPositionMs, progressViewModel, onBack)
+    }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun PlaybackPlayer(movie: Movie, initialPositionMs: Long, progressViewModel: PlayerViewModel,
+                           onBack: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
     var playbackState by remember { mutableIntStateOf(Player.STATE_IDLE) }
     var error by remember { mutableStateOf<PlaybackException?>(null) }
+    var leaving by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
-    val player = remember(movie.id) {
-        ExoPlayer.Builder(context)
-            .setSeekBackIncrementMs(10_000)
-            .setSeekForwardIncrementMs(10_000)
-            .build()
-            .apply {
-                addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(state: Int) { playbackState = state }
-                    override fun onPlayerError(playerError: PlaybackException) { error = playerError }
-                })
-                setMediaItem(buildMediaItem(movie))
-                playWhenReady = true
-                prepare()
-            }
+    val player = remember(movie.id, initialPositionMs) {
+        ExoPlayer.Builder(context).setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(10_000).build().apply {
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) { playbackState = state }
+                override fun onPlayerError(playerError: PlaybackException) { error = playerError }
+            })
+            setMediaItem(buildMediaItem(movie), initialPositionMs)
+            playWhenReady = true
+            prepare()
+        }
+    }
+    fun save() = progressViewModel.save(player.currentPosition, player.duration)
+    fun exit() {
+        if (leaving) return
+        leaving = true
+        progressViewModel.saveThen(player.currentPosition, player.duration, onBack)
+    }
+
+    LaunchedEffect(player) {
+        while (true) {
+            delay(PROGRESS_SAVE_INTERVAL_MS)
+            if (player.isPlaying) save()
+        }
     }
     DisposableEffect(player, lifecycleOwner) {
         var resumePlayback = true
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> { resumePlayback = player.playWhenReady; player.pause() }
+                Lifecycle.Event.ON_PAUSE -> save()
+                Lifecycle.Event.ON_STOP -> { save(); resumePlayback = player.playWhenReady; player.pause() }
                 Lifecycle.Event.ON_START -> if (resumePlayback) player.play()
                 else -> Unit
             }
@@ -76,6 +102,7 @@ fun PlayerScreen(movie: Movie?, onBack: () -> Unit) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            save()
             playerView?.player = null
             player.release()
         }
@@ -94,48 +121,38 @@ fun PlayerScreen(movie: Movie?, onBack: () -> Unit) {
         }
     }
     BackHandler {
-        if (playerView?.isControllerFullyVisible == true) playerView?.hideController() else onBack()
+        if (playerView?.isControllerFullyVisible == true) playerView?.hideController() else exit()
     }
     LaunchedEffect(movie.id) { focusRequester.requestFocus() }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(
-            factory = { viewContext ->
-                PlayerView(viewContext).apply {
-                    useController = true
-                    controllerShowTimeoutMs = 4_000
-                    controllerAutoShow = true
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    keepScreenOn = true
-                    setShowSubtitleButton(true)
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                    this.player = player
-                    requestFocus()
-                    playerView = this
+        AndroidView(factory = { viewContext ->
+            PlayerView(viewContext).apply {
+                useController = true; controllerShowTimeoutMs = 4_000; controllerAutoShow = true
+                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT; keepScreenOn = true
+                setShowSubtitleButton(true); setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                this.player = player; requestFocus(); playerView = this
+            }
+        }, update = { it.player = player }, modifier = Modifier.fillMaxSize().focusRequester(focusRequester)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown || playerView?.isControllerFullyVisible != true) false
+                else when (event.key) {
+                    Key.DirectionLeft -> { player.seekBack(); true }
+                    Key.DirectionRight -> { player.seekForward(); true }
+                    else -> false
                 }
-            },
-            update = { it.player = player },
-            modifier = Modifier.fillMaxSize().focusRequester(focusRequester)
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown || playerView?.isControllerFullyVisible != true) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.DirectionLeft -> { player.seekBack(); true }
-                        Key.DirectionRight -> { player.seekForward(); true }
-                        else -> false
-                    }
-                },
-        )
-        if (playbackState == Player.STATE_BUFFERING && error == null) {
-            Text("Loading movie...", fontSize = 22.sp, modifier = Modifier.align(Alignment.Center))
-        }
+            })
+        if (playbackState == Player.STATE_BUFFERING && error == null) Text("Loading movie...", fontSize = 22.sp,
+            modifier = Modifier.align(Alignment.Center))
         error?.let {
             Box(Modifier.fillMaxSize().background(Color(0xDD09090C)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Unable to play this movie", fontSize = 28.sp)
-                    Text("Check that the HomeFlix server is running and the movie file still exists.", color = Color.LightGray, modifier = Modifier.padding(top = 12.dp))
+                    Text("Check that the HomeFlix server is running and the movie file still exists.",
+                        color = Color.LightGray, modifier = Modifier.padding(top = 12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 24.dp)) {
                         Button(onClick = { error = null; player.prepare(); player.play() }) { Text("Retry") }
-                        Button(onClick = onBack) { Text("Back") }
+                        Button(onClick = ::exit) { Text("Back") }
                     }
                 }
             }

@@ -43,6 +43,9 @@ class Movie(Base):
     subtitles: Mapped[list["Subtitle"]] = relationship(
         back_populates="movie", cascade="all, delete-orphan", order_by="Subtitle.id"
     )
+    playback_progress: Mapped["PlaybackProgress | None"] = relationship(
+        back_populates="movie", cascade="all, delete-orphan", uselist=False
+    )
 
 
 class Subtitle(Base):
@@ -57,3 +60,19 @@ class Subtitle(Base):
     format: Mapped[str] = mapped_column(String(16))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     movie: Mapped[Movie] = relationship(back_populates="subtitles")
+
+
+class PlaybackProgress(Base):
+    __tablename__ = "playback_progress"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    movie_id: Mapped[int] = mapped_column(
+        ForeignKey("movies.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    position_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    duration_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_watched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    movie: Mapped[Movie] = relationship(back_populates="playback_progress")

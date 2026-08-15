@@ -10,7 +10,7 @@ load_dotenv()
 @dataclass(frozen=True)
 class Settings:
     api_name: str = "HomeFlix API"
-    version: str = "0.4.0"
+    version: str = "0.5.0"
     database_url: str = field(
         default_factory=lambda: os.getenv("HOMEFLIX_DATABASE_URL", "sqlite:///./homeflix.db")
     )

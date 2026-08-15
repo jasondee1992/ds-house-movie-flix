@@ -1,6 +1,10 @@
 package com.jasond.homeflix.data.remote
 
 import retrofit2.http.GET
+import retrofit2.http.Body
+import retrofit2.http.DELETE
+import retrofit2.http.PUT
+import retrofit2.http.Path
 
 data class HealthResponse(val status: String, val service: String)
 
@@ -32,6 +36,25 @@ data class SubtitleDto(
     val url: String = "",
 )
 
+data class ProgressDto(
+    val movie_id: Long,
+    val position_ms: Long,
+    val duration_ms: Long,
+    val progress_percent: Double,
+    val completed: Boolean,
+    val last_watched_at: String?,
+)
+
+data class ProgressUpdateDto(val position_ms: Long, val duration_ms: Long)
+
+data class ContinueWatchingDto(
+    val movie: MovieDto,
+    val position_ms: Long,
+    val duration_ms: Long,
+    val progress_percent: Double,
+    val last_watched_at: String?,
+)
+
 interface ApiService {
     @GET("api/health")
     suspend fun health(): HealthResponse
@@ -40,5 +63,17 @@ interface ApiService {
     suspend fun movies(): List<MovieDto>
 
     @GET("api/movies/{id}")
-    suspend fun movie(@retrofit2.http.Path("id") id: Long): MovieDto
+    suspend fun movie(@Path("id") id: Long): MovieDto
+
+    @GET("api/movies/{id}/progress")
+    suspend fun progress(@Path("id") id: Long): ProgressDto
+
+    @PUT("api/movies/{id}/progress")
+    suspend fun updateProgress(@Path("id") id: Long, @Body update: ProgressUpdateDto): ProgressDto
+
+    @DELETE("api/movies/{id}/progress")
+    suspend fun clearProgress(@Path("id") id: Long)
+
+    @GET("api/continue-watching")
+    suspend fun continueWatching(): List<ContinueWatchingDto>
 }

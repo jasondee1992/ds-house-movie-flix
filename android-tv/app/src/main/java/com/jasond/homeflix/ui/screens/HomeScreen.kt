@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.*
 import coil.compose.*
 import com.jasond.homeflix.data.model.Movie
+import com.jasond.homeflix.data.model.ContinueWatchingItem
 import com.jasond.homeflix.ui.*
 import com.jasond.homeflix.ui.format.formatRuntime
 
@@ -38,7 +39,7 @@ fun HomeScreen(onMovieSelected: (Long) -> Unit, viewModel: HomeViewModel) {
         when (val current = state) {
             HomeUiState.Loading -> MessageState("Loading your library…")
             is HomeUiState.Error -> ErrorState(current.message, viewModel::loadMovies)
-            is HomeUiState.Success -> if (current.movies.isEmpty()) EmptyState() else MovieLibrary(current.movies, onMovieSelected)
+            is HomeUiState.Success -> if (current.movies.isEmpty()) EmptyState() else MovieLibrary(current.movies, current.continueWatching, onMovieSelected)
         }
     }
 }
@@ -54,7 +55,7 @@ private fun Header(connection: ConnectionStatus) {
 }
 
 @Composable
-private fun MovieLibrary(movies: List<Movie>, onSelected: (Long) -> Unit) {
+private fun MovieLibrary(movies: List<Movie>, continueWatching: List<ContinueWatchingItem>, onSelected: (Long) -> Unit) {
     val recent = remember(movies) { movies.sortedByDescending { it.dateAdded } }
     val all = remember(movies) { movies.sortedBy { it.title.lowercase() } }
     val hero = recent.first()
@@ -62,8 +63,25 @@ private fun MovieLibrary(movies: List<Movie>, onSelected: (Long) -> Unit) {
     LaunchedEffect(hero.id) { focus.requestFocus() }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
         item { Hero(hero, focus) { onSelected(hero.id) } }
+        if (continueWatching.isNotEmpty()) item { ContinueWatchingRow(continueWatching, onSelected) }
         item { MovieRow("Recently Added", recent.take(12), onSelected) }
         item { Spacer(Modifier.height(18.dp)); MovieRow("All Movies", all, onSelected) }
+    }
+}
+
+@Composable
+private fun ContinueWatchingRow(items: List<ContinueWatchingItem>, onSelected: (Long) -> Unit) {
+    Column {
+        Text("Continue Watching", fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 48.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp),
+            contentPadding = PaddingValues(horizontal = 48.dp, vertical = 16.dp)) {
+            itemsIndexed(items, key = { _, item -> item.movie.id }) { _, item ->
+                MovieCard(item.movie, (item.progress.progressPercent / 100.0).toFloat()) {
+                    onSelected(item.movie.id)
+                }
+            }
+        }
     }
 }
 
@@ -93,11 +111,20 @@ private fun MovieRow(title: String, movies: List<Movie>, onSelected: (Long) -> U
 }
 
 @Composable
-private fun MovieCard(movie: Movie, onClick: () -> Unit) {
+private fun MovieCard(movie: Movie, progress: Float? = null, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.06f else 1f, label = "movie focus")
     Column(Modifier.width(150.dp).padding(vertical = 5.dp)) {
-        Card(onClick = onClick, modifier = Modifier.size(150.dp, 225.dp).scale(scale).onFocusChanged { focused = it.isFocused }.then(if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(9.dp)) else Modifier), colors = CardDefaults.colors(containerColor = Color(0xFF282830)), shape = CardDefaults.shape(RoundedCornerShape(9.dp))) { Poster(movie.posterUrl, movie.title) }
+        Card(onClick = onClick, modifier = Modifier.size(150.dp, 225.dp).scale(scale).onFocusChanged { focused = it.isFocused }.then(if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(9.dp)) else Modifier), colors = CardDefaults.colors(containerColor = Color(0xFF282830)), shape = CardDefaults.shape(RoundedCornerShape(9.dp))) {
+            Box(Modifier.fillMaxSize()) {
+                Poster(movie.posterUrl, movie.title)
+                progress?.let { value ->
+                    Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(6.dp).background(Color(0xFF4A4A50))) {
+                        Box(Modifier.fillMaxHeight().fillMaxWidth(value.coerceIn(0f, 1f)).background(Color(0xFFE50914)))
+                    }
+                }
+            }
+        }
         Text(movie.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp, fontWeight = if (focused) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.padding(top = 8.dp))
         movie.year?.let { Text(it.toString(), color = Color.LightGray, fontSize = 13.sp) }
     }

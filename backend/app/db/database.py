@@ -15,7 +15,7 @@ class Database:
         self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def create_tables(self) -> None:
-        from app.models.movie import Movie, Subtitle  # noqa: F401
+        from app.models.movie import Movie, PlaybackProgress, Subtitle  # noqa: F401
 
         Base.metadata.create_all(self.engine)
         # Phase 2 shipped without a migration framework. Additive columns preserve
