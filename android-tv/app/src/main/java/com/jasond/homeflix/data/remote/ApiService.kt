@@ -5,8 +5,10 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.POST
 
 data class HealthResponse(val status: String, val service: String)
+data class ScanResponse(val status: String)
 
 data class MovieDto(
     val id: Long,
@@ -61,6 +63,9 @@ interface ApiService {
 
     @GET("api/movies")
     suspend fun movies(): List<MovieDto>
+
+    @POST("api/library/scan")
+    suspend fun scanLibrary(): ScanResponse
 
     @GET("api/movies/{id}")
     suspend fun movie(@Path("id") id: Long): MovieDto

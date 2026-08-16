@@ -7,6 +7,7 @@ from app.models.movie import Movie
 from app.services.media_scanner import (clean_title, discover_subtitles, find_backdrop,
     find_poster, parse_title_year, scan_media_directories)
 from app.models.movie import Subtitle
+from app.services.movie_metadata import catalog_genre, sidecar_genre
 
 
 def test_scanner_discovers_nested_mixed_case_and_handles_rescan(tmp_path: Path) -> None:
@@ -29,7 +30,7 @@ def test_scanner_discovers_nested_mixed_case_and_handles_rescan(tmp_path: Path) 
         assert initial.scanned_files == 2
         assert initial.added == 2
         assert initial.ignored == 2
-        assert [movie.title for movie in movies] == ["Avengers Endgame 2019", "Iron Man"]
+        assert [movie.title for movie in movies] == ["Avengers.Endgame.2019", "Iron_Man"]
 
         rescan = scan_media_directories(session, (media,))
         assert rescan.added == 0
@@ -71,6 +72,21 @@ def test_folder_artwork_and_subtitles_are_discovered(tmp_path: Path) -> None:
     assert find_poster(movie).name == "POSTER.JPG"
     assert find_backdrop(movie).name == "backdrop.png"
     assert {p.suffix.lower() for p in discover_subtitles(movie)} == {".srt", ".vtt", ".ass"}
+
+
+def test_any_image_in_movie_folder_can_be_the_poster(tmp_path: Path) -> None:
+    folder = tmp_path / "Movie"; folder.mkdir()
+    movie = folder / "Movie.mp4"; movie.touch()
+    (folder / "artwork.webp").touch()
+    assert find_poster(movie).name == "artwork.webp"
+
+
+def test_genre_sidecar_and_catalog_metadata(tmp_path: Path) -> None:
+    folder = tmp_path / "Unknown Movie (2026)"; folder.mkdir()
+    movie = folder / "Unknown.Movie.2026.mp4"; movie.touch()
+    (folder / "genre.txt").write_text("Horror, Comedy", encoding="utf-8")
+    assert sidecar_genre(movie) == "Horror, Comedy"
+    assert catalog_genre("John Wick (2014)", 2014) == "Action, Thriller"
 
 
 def test_subtitle_deduplication_and_deleted_cleanup(tmp_path: Path, monkeypatch) -> None:

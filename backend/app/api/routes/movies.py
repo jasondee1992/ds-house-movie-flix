@@ -1,4 +1,5 @@
 from pathlib import Path
+import mimetypes
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
@@ -10,6 +11,7 @@ from app.models.movie import Movie, Subtitle
 from app.schemas.movie import MovieResponse, SubtitleResponse
 from app.services.media_stream import (ByteRange, InvalidRange, iter_file_range, parse_range_header,
     resolve_trusted_file, subtitle_content_type, video_content_type)
+from app.services.artwork_catalog import bundled_artwork
 
 router = APIRouter(prefix="/movies", tags=["movies"])
 
@@ -64,10 +66,18 @@ def _image(movie_id: int, attribute: str, session: Session) -> FileResponse:
     movie = session.get(Movie, movie_id)
     if movie is None: raise HTTPException(status_code=404, detail="Movie not found")
     value = getattr(movie, attribute)
-    if not value or not Path(value).is_file(): raise HTTPException(status_code=404, detail="Image not found")
-    image = Path(value)
-    types = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
-    return FileResponse(image, media_type=types.get(image.suffix.lower(), "image/jpeg"))
+    kind = "poster" if attribute == "poster_path" else "backdrop"
+    image = Path(value) if value and Path(value).is_file() else bundled_artwork(movie.title, movie.year, kind)
+    if image is None: raise HTTPException(status_code=404, detail="Image not found")
+    image_types = {
+        ".avif": "image/avif", ".bmp": "image/bmp", ".gif": "image/gif",
+        ".heic": "image/heic", ".heif": "image/heif", ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg", ".jfif": "image/jpeg", ".png": "image/png",
+        ".svg": "image/svg+xml", ".tif": "image/tiff", ".tiff": "image/tiff",
+        ".webp": "image/webp",
+    }
+    media_type = image_types.get(image.suffix.lower()) or mimetypes.guess_type(image.name)[0] or "application/octet-stream"
+    return FileResponse(image, media_type=media_type)
 
 
 @router.get("/{movie_id}/poster", response_model=None)

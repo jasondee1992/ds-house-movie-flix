@@ -1,6 +1,10 @@
 package com.jasond.homeflix.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -35,7 +39,15 @@ fun DetailsScreen(
         return
     }
     val playFocus = remember { FocusRequester() }
-    LaunchedEffect(movie.id) { onLoadProgress(); playFocus.requestFocus() }
+    var contentVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(movie.id) {
+        onLoadProgress()
+        contentVisible = true
+        // The play button lives inside AnimatedVisibility; focus it after it is mounted.
+        withFrameNanos { }
+        withFrameNanos { }
+        playFocus.requestFocus()
+    }
     Box(Modifier.fillMaxSize().background(Color(0xFF09090C))) {
         movie.backdropUrl?.let { AsyncImage(model = it, contentDescription = null,
             contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
@@ -43,8 +55,16 @@ fun DetailsScreen(
             listOf(Color(0xFA09090C), Color(0xD909090C), Color(0x2509090C)))))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
             listOf(Color.Transparent, Color(0xEE09090C)))))
-        Column(Modifier.fillMaxWidth(0.68f).align(Alignment.CenterStart).padding(start = 72.dp, top = 44.dp)) {
-            Text(movie.title.uppercase(), fontSize = 44.sp, fontWeight = FontWeight.ExtraBold)
+        AnimatedVisibility(
+            visible = contentVisible,
+            enter = fadeIn(tween(650)) + slideInHorizontally(tween(650)) { -it / 8 },
+            modifier = Modifier.align(Alignment.CenterStart),
+        ) {
+        Column(Modifier.fillMaxWidth(0.62f).padding(start = 72.dp, top = 44.dp)) {
+            Text("HOMEFLIX  •  FEATURED", color = Color(0xFFE50914), fontSize = 14.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            Text(movie.title.uppercase(), fontSize = 48.sp, lineHeight = 50.sp,
+                fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 12.dp))
             val facts = listOfNotNull(movie.year?.toString(), movie.quality, formatRuntime(movie.durationSeconds))
             if (facts.isNotEmpty()) Text(facts.joinToString("  •  "), color = Color(0xFFE0E0E0),
                 fontSize = 20.sp, modifier = Modifier.padding(top = 12.dp))
@@ -69,6 +89,7 @@ fun DetailsScreen(
                 if (progress?.canResume == true) Button(onClick = { onPlayMovie(movie.id, true) }) { Text("START OVER") }
                 Button(onClick = onBack) { Text("BACK") }
             }
+        }
         }
     }
 }

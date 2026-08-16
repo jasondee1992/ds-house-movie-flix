@@ -39,7 +39,7 @@ See [backend/README.md](backend/README.md) and [docs/development.md](docs/develo
 
 - No TMDB, scraping, or external metadata provider is used; missing descriptions and genres stay empty.
 - Technical fields remain empty when `ffprobe` is unavailable.
-- Library scanning is manually triggered through the API.
+- The Android TV app scans and refreshes the library automatically every 15 seconds while it is running; the manual scan API remains available.
 - Progress is stored per movie for the current single-user setup. Profiles, favorites, ratings, and multi-user history remain future work.
 - Movies become completed at 90% watched and leave Continue Watching. Items under 30 seconds are omitted.
 - Active playback saves every 15 seconds and on pause, backgrounding, disposal, and Back.

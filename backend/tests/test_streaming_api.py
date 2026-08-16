@@ -11,7 +11,7 @@ def _scan_movie(client: TestClient, media_dir: Path, name: str = "Sample (2026).
     payload = bytes(range(256)) * 32
     (media_dir / name).write_bytes(payload)
     assert client.post("/api/library/scan").status_code == 200
-    movie = next(item for item in client.get("/api/movies").json() if item["title"] == "Sample")
+    movie = next(item for item in client.get("/api/movies").json() if item["title"] == Path(name).stem)
     return movie["id"], payload
 
 
@@ -80,7 +80,7 @@ def test_subtitle_streaming_ownership_content_type_and_safety(client: TestClient
     client.post("/api/library/scan")
     movies = client.get("/api/movies").json()
     first = next(item for item in movies if item["id"] == first_id)
-    second = next(item for item in movies if item["title"] == "Other")
+    second = next(item for item in movies if item["title"] == "Other (2025)")
     subtitle_id = first["subtitles"][0]["id"]
     valid = client.get(f"/api/movies/{first_id}/subtitles/{subtitle_id}")
     assert valid.status_code == 200 and b"Hello" in valid.content

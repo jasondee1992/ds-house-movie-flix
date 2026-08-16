@@ -42,3 +42,19 @@ def test_empty_library_and_scan_are_useful(client: TestClient) -> None:
     result = client.post("/api/library/scan").json()
     assert result["status"] == "ok"
     assert result["scanned_files"] == 0
+
+
+def test_bundled_artwork_is_used_when_matching_movie_has_no_images(
+    client: TestClient, media_dir: Path,
+) -> None:
+    (media_dir / "Minions Monsters (2026).mp4").write_bytes(b"movie")
+    client.post("/api/library/scan")
+    movie_id = client.get("/api/movies").json()[0]["id"]
+
+    poster = client.get(f"/api/movies/{movie_id}/poster")
+    backdrop = client.get(f"/api/movies/{movie_id}/backdrop")
+
+    assert poster.status_code == 200
+    assert poster.headers["content-type"].startswith("image/jpeg")
+    assert backdrop.status_code == 200
+    assert backdrop.headers["content-type"].startswith("image/webp")

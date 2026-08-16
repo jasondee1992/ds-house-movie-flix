@@ -17,6 +17,8 @@ class HomeRepository(private val api: ApiService) {
         api.movies().map { it.toDomain() }
     }
 
+    suspend fun scanLibrary(): Result<Unit> = runCatching { api.scanLibrary(); Unit }
+
     suspend fun getProgress(movieId: Long): Result<PlaybackProgress> = runCatching {
         api.progress(movieId).toDomain()
     }

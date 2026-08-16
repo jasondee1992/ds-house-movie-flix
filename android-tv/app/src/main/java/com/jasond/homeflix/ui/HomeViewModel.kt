@@ -10,6 +10,7 @@ import com.jasond.homeflix.data.remote.ApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 enum class ConnectionStatus { CHECKING, CONNECTED, UNAVAILABLE }
@@ -31,12 +32,25 @@ class HomeViewModel(
     private val _progress = MutableStateFlow<Map<Long, PlaybackProgress>>(emptyMap())
     val progress: StateFlow<Map<Long, PlaybackProgress>> = _progress.asStateFlow()
 
-    init { loadMovies() }
-
-    fun loadMovies() {
-        _uiState.value = HomeUiState.Loading
-        _connectionStatus.value = ConnectionStatus.CHECKING
+    init {
+        loadMovies()
         viewModelScope.launch {
+            while (true) {
+                delay(LIBRARY_REFRESH_INTERVAL_MS)
+                refreshMovies(showLoading = false)
+            }
+        }
+    }
+
+    fun loadMovies() = refreshMovies(showLoading = true)
+
+    private fun refreshMovies(showLoading: Boolean) {
+        if (showLoading) {
+            _uiState.value = HomeUiState.Loading
+            _connectionStatus.value = ConnectionStatus.CHECKING
+        }
+        viewModelScope.launch {
+            repository.scanLibrary()
             val moviesResult = repository.getMovies()
             val continueResult = repository.getContinueWatching()
             moviesResult.onSuccess { movies ->
@@ -47,9 +61,15 @@ class HomeViewModel(
                 }
                 .onFailure {
                     _connectionStatus.value = ConnectionStatus.UNAVAILABLE
-                    _uiState.value = HomeUiState.Error("HomeFlix server unavailable")
+                    if (showLoading || _uiState.value !is HomeUiState.Success) {
+                        _uiState.value = HomeUiState.Error("HomeFlix server unavailable")
+                    }
                 }
         }
+    }
+
+    private companion object {
+        const val LIBRARY_REFRESH_INTERVAL_MS = 15_000L
     }
 
     fun movieById(id: Long): Movie? = (uiState.value as? HomeUiState.Success)

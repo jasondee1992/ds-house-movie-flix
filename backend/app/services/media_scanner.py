@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.models.movie import Movie, Subtitle
 from app.services.media_probe import probe_media
+from app.services.movie_metadata import catalog_genre, sidecar_genre
 
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm"}
-IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".jfif", ".png", ".webp", ".gif", ".bmp", ".avif", ".heic", ".heif", ".tif", ".tiff", ".svg")
 SUBTITLE_EXTENSIONS = {".srt", ".vtt", ".ass", ".ssa"}
 YEAR_PATTERN = re.compile(r"^(?P<title>.+?)\s*\((?P<year>(?:19|20)\d{2})\)\s*$")
 
@@ -56,7 +57,17 @@ def find_poster(movie_path: Path) -> Path | None:
     names += [f"folder{ext}" for ext in IMAGE_EXTENSIONS] + [f"cover{ext}" for ext in IMAGE_EXTENSIONS]
     names += [f"{movie_path.stem}{ext}" for ext in IMAGE_EXTENSIONS]
     names += [f"{movie_path.stem}.poster{ext}" for ext in IMAGE_EXTENSIONS]
-    return next((files[name.lower()].resolve() for name in names if name.lower() in files), None)
+    named = next((files[name.lower()].resolve() for name in names if name.lower() in files), None)
+    if named:
+        return named
+    images = sorted(
+        (path for path in files.values() if path.suffix.lower() in IMAGE_EXTENSIONS),
+        key=lambda path: path.name.lower(),
+    )
+    preferred = [path for path in images if not any(
+        hint in path.stem.lower() for hint in ("backdrop", "background", "fanart", "hero")
+    )]
+    return (preferred or images or [None])[0]
 
 
 def find_backdrop(movie_path: Path) -> Path | None:
@@ -168,12 +179,16 @@ def scan_media_directories(session: Session, media_dirs: tuple[Path, ...]) -> Sc
             path, path_key = path.resolve(), normalize_path(path)
             discovered.add(path_key)
             stat = path.stat(); modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
-            title_source = path.parent.name if YEAR_PATTERN.match(path.parent.name.strip()) else path.stem
-            title, year = parse_title_year(title_source)
+            # The library title mirrors the video filename exactly, minus its extension.
+            title = path.stem
+            _, file_year = parse_title_year(path.stem)
+            _, folder_year = parse_title_year(path.parent.name)
+            year = folder_year or file_year
             poster, backdrop = find_poster(path), find_backdrop(path)
+            genre = sidecar_genre(path) or catalog_genre(path.parent.name, year) or "Other"
             values = dict(title=title, year=year, file_name=path.name, file_path=str(path), normalized_path=path_key,
                           media_root=root_key, media_directory=str(path.parent), file_extension=path.suffix.lower(),
-                          file_size=stat.st_size, date_modified=modified,
+                          file_size=stat.st_size, date_modified=modified, genre=genre,
                           poster_path=str(poster) if poster else None, backdrop_path=str(backdrop) if backdrop else None)
             movie = existing.get(path_key)
             if movie is None:
