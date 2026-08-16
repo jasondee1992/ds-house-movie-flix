@@ -2,11 +2,12 @@ package com.jasond.homeflix.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,81 +16,145 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.jasond.homeflix.data.model.Movie
 import com.jasond.homeflix.data.model.PlaybackProgress
+import com.jasond.homeflix.ui.components.MovieRow
 import com.jasond.homeflix.ui.format.audioChannelLabel
 import com.jasond.homeflix.ui.format.formatRuntime
+import com.jasond.homeflix.ui.theme.HomeFlixColors
+import com.jasond.homeflix.ui.theme.TvMotion
 
 @Composable
 fun DetailsScreen(
-    movie: Movie?, progress: PlaybackProgress?, onLoadProgress: () -> Unit,
-    onPlayMovie: (Long, Boolean) -> Unit, onBack: () -> Unit,
+    movie: Movie?,
+    progress: PlaybackProgress?,
+    relatedMovies: List<Movie>,
+    onLoadProgress: () -> Unit,
+    onPlayMovie: (Long, Boolean) -> Unit,
+    onMovieSelected: (Long) -> Unit,
+    onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
     if (movie == null) {
-        Box(Modifier.fillMaxSize().background(Color(0xFF09090C)), contentAlignment = Alignment.Center) {
-            Text("Movie details unavailable")
+        Box(Modifier.fillMaxSize().background(HomeFlixColors.Background)) {
+            CenteredState("Movie unavailable", "Return to the library and choose another title.", "BACK", onBack)
         }
         return
     }
     val playFocus = remember { FocusRequester() }
-    var contentVisible by remember { mutableStateOf(false) }
+    var visible by remember(movie.id) { mutableStateOf(false) }
     LaunchedEffect(movie.id) {
         onLoadProgress()
-        contentVisible = true
-        // The play button lives inside AnimatedVisibility; focus it after it is mounted.
+        visible = true
         withFrameNanos { }
         withFrameNanos { }
         playFocus.requestFocus()
     }
-    Box(Modifier.fillMaxSize().background(Color(0xFF09090C))) {
-        movie.backdropUrl?.let { AsyncImage(model = it, contentDescription = null,
-            contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(
-            listOf(Color(0xFA09090C), Color(0xD909090C), Color(0x2509090C)))))
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-            listOf(Color.Transparent, Color(0xEE09090C)))))
-        AnimatedVisibility(
-            visible = contentVisible,
-            enter = fadeIn(tween(650)) + slideInHorizontally(tween(650)) { -it / 8 },
-            modifier = Modifier.align(Alignment.CenterStart),
-        ) {
-        Column(Modifier.fillMaxWidth(0.62f).padding(start = 72.dp, top = 44.dp)) {
-            Text("HOMEFLIX  •  FEATURED", color = Color(0xFFE50914), fontSize = 14.sp,
-                fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-            Text(movie.title.uppercase(), fontSize = 48.sp, lineHeight = 50.sp,
-                fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 12.dp))
-            val facts = listOfNotNull(movie.year?.toString(), movie.quality, formatRuntime(movie.durationSeconds))
-            if (facts.isNotEmpty()) Text(facts.joinToString("  •  "), color = Color(0xFFE0E0E0),
-                fontSize = 20.sp, modifier = Modifier.padding(top = 12.dp))
-            Text(movie.description ?: "Description unavailable", fontSize = 20.sp, lineHeight = 28.sp,
-                modifier = Modifier.padding(top = 24.dp))
-            movie.genre?.let { Text(it, color = Color.LightGray, fontSize = 17.sp,
-                modifier = Modifier.padding(top = 12.dp)) }
-            val video = movie.videoCodec?.uppercase()
-            val audio = listOfNotNull(movie.audioCodec?.uppercase(), audioChannelLabel(movie.audioChannels))
-                .joinToString(" ").ifBlank { null }
-            if (video != null || audio != null) Text(listOfNotNull(video?.let { "Video: $it" },
-                audio?.let { "Audio: $it" }).joinToString("    "), color = Color.LightGray,
-                fontSize = 16.sp, modifier = Modifier.padding(top = 18.dp))
-            if (movie.subtitles.isNotEmpty()) Text("Subtitles: ${movie.subtitles.map { it.language }.distinct().joinToString()}",
-                color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.padding(top = 7.dp))
-            if (progress?.canResume == true) Text("${progress.progressPercent.toInt()}% watched",
-                color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.padding(top = 12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(top = 30.dp)) {
-                Button(onClick = { onPlayMovie(movie.id, false) }, modifier = Modifier.focusRequester(playFocus)) {
-                    Text(if (progress?.canResume == true) "▶  RESUME" else "▶  PLAY", fontWeight = FontWeight.Bold)
+    LazyColumn(Modifier.fillMaxSize().background(HomeFlixColors.Background)) {
+        item {
+            Box(Modifier.fillMaxWidth().height(700.dp)) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(movie.backdropUrl ?: movie.posterUrl).crossfade(450).build(),
+                    contentDescription = "${movie.title} backdrop",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(Modifier.fillMaxSize().background(Color(0x33000000)))
+                Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(
+                    listOf(Color(0xFC070708), Color(0xD8070708), Color(0x62070708), Color.Transparent))))
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+                    listOf(Color.Transparent, Color(0x55070708), HomeFlixColors.Background))))
+                AnimatedVisibility(
+                    visible = visible,
+                    enter = fadeIn(tween(500)) + slideInHorizontally(tween(500)) { -it / 10 },
+                    modifier = Modifier.align(Alignment.CenterStart),
+                ) {
+                    DetailsHeader(movie, progress, playFocus, onPlayMovie, onBack)
                 }
-                if (progress?.canResume == true) Button(onClick = { onPlayMovie(movie.id, true) }) { Text("START OVER") }
-                Button(onClick = onBack) { Text("BACK") }
             }
         }
+        if (relatedMovies.isNotEmpty()) item {
+            MovieRow(
+                title = "More Like This",
+                movies = relatedMovies,
+                onMovieSelected = onMovieSelected,
+                modifier = Modifier.padding(start = 72.dp, top = 8.dp),
+            )
+        }
+        item { Spacer(Modifier.height(42.dp)) }
+    }
+}
+
+@Composable
+private fun DetailsHeader(
+    movie: Movie,
+    progress: PlaybackProgress?,
+    playFocus: FocusRequester,
+    onPlayMovie: (Long, Boolean) -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth(.62f).padding(start = 72.dp, top = 46.dp)) {
+        Text("HOMEFLIX FEATURE", color = HomeFlixColors.Brand, fontSize = 14.sp,
+            fontWeight = FontWeight.Bold, letterSpacing = 1.7.sp)
+        Text(movie.title, fontSize = 52.sp, lineHeight = 55.sp, fontWeight = FontWeight.Black,
+            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
+        MetadataRow(movie)
+        Text(
+            movie.description ?: "No description is available for this title.",
+            fontSize = 19.sp,
+            lineHeight = 27.sp,
+            color = HomeFlixColors.TextPrimary,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 20.dp),
+        )
+        movie.genre?.let { genres ->
+            Row(Modifier.padding(top = 15.dp)) {
+                Text("Genres  ", color = HomeFlixColors.TextSecondary, fontSize = 16.sp)
+                Text(genres, color = HomeFlixColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+        val technical = listOfNotNull(
+            movie.videoCodec?.uppercase(),
+            listOfNotNull(movie.audioCodec?.uppercase(), audioChannelLabel(movie.audioChannels))
+                .joinToString(" ").ifBlank { null },
+            movie.subtitles.takeIf { it.isNotEmpty() }?.let { "${it.size} subtitle${if (it.size == 1) "" else "s"}" },
+        )
+        if (technical.isNotEmpty()) Text(technical.joinToString("   |   "), color = HomeFlixColors.TextSecondary,
+            fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+        if (progress?.canResume == true) Text("${progress.progressPercent.toInt()}% watched",
+            color = HomeFlixColors.TextSecondary, fontSize = 15.sp, modifier = Modifier.padding(top = 12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 27.dp)) {
+            Button(
+                onClick = { onPlayMovie(movie.id, false) },
+                modifier = Modifier.focusRequester(playFocus),
+                colors = ButtonDefaults.colors(containerColor = Color.White, contentColor = Color.Black),
+            ) { Text(if (progress?.canResume == true) "RESUME" else "PLAY", fontWeight = FontWeight.Black) }
+            if (progress?.canResume == true) Button(onClick = { onPlayMovie(movie.id, true) }) { Text("START OVER") }
+            Button(onClick = onBack, colors = ButtonDefaults.colors(containerColor = Color(0xD947474D))) { Text("BACK") }
         }
     }
+}
+
+@Composable
+private fun MetadataRow(movie: Movie) {
+    val facts = listOfNotNull(movie.year?.toString(), movie.quality, formatRuntime(movie.durationSeconds))
+    if (facts.isNotEmpty()) Text(
+        facts.joinToString("   |   "),
+        color = HomeFlixColors.TextSecondary,
+        fontSize = 18.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(top = 15.dp),
+    )
 }

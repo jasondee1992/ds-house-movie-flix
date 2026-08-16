@@ -76,6 +76,23 @@ class HomeViewModel(
         ?.movies
         ?.firstOrNull { it.id == id }
 
+    fun relatedMovies(id: Long, limit: Int = 12): List<Movie> {
+        val movies = (uiState.value as? HomeUiState.Success)?.movies.orEmpty()
+        val selected = movies.firstOrNull { it.id == id } ?: return emptyList()
+        val genres = selected.genre?.split(',')?.map { it.trim().lowercase() }?.toSet().orEmpty()
+        return movies.asSequence()
+            .filter { it.id != id }
+            .map { candidate ->
+                val candidateGenres = candidate.genre?.split(',')?.map { it.trim().lowercase() }?.toSet().orEmpty()
+                candidate to candidateGenres.intersect(genres).size
+            }
+            .filter { (_, score) -> score > 0 }
+            .sortedWith(compareByDescending<Pair<Movie, Int>> { it.second }.thenBy { it.first.title.lowercase() })
+            .take(limit)
+            .map { it.first }
+            .toList()
+    }
+
     fun loadProgress(movieId: Long) {
         viewModelScope.launch {
             repository.getProgress(movieId).onSuccess { value ->

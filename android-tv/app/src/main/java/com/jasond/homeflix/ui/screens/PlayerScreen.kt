@@ -7,12 +7,19 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -35,6 +42,7 @@ import com.jasond.homeflix.data.model.Movie
 import com.jasond.homeflix.ui.PlayerProgressState
 import com.jasond.homeflix.ui.PlayerViewModel
 import com.jasond.homeflix.ui.player.buildMediaItem
+import com.jasond.homeflix.ui.theme.HomeFlixColors
 import kotlinx.coroutines.delay
 
 private const val PROGRESS_SAVE_INTERVAL_MS = 15_000L
@@ -48,13 +56,13 @@ fun PlayerScreen(movie: Movie?, onBack: () -> Unit, progressViewModel: PlayerVie
     }
     val progressState by progressViewModel.state.collectAsStateWithLifecycle()
     when (val state = progressState) {
-        PlayerProgressState.Loading -> Box(Modifier.fillMaxSize().background(Color.Black),
-            contentAlignment = Alignment.Center) { Text("Loading movie...", fontSize = 22.sp) }
+        PlayerProgressState.Loading -> PlaybackLoading()
         is PlayerProgressState.Ready -> PlaybackPlayer(movie, state.initialPositionMs, progressViewModel, onBack)
     }
 }
 
 @OptIn(UnstableApi::class)
+@Suppress("DEPRECATION")
 @Composable
 private fun PlaybackPlayer(movie: Movie, initialPositionMs: Long, progressViewModel: PlayerViewModel,
                            onBack: () -> Unit) {
@@ -142,8 +150,7 @@ private fun PlaybackPlayer(movie: Movie, initialPositionMs: Long, progressViewMo
                     else -> false
                 }
             })
-        if (playbackState == Player.STATE_BUFFERING && error == null) Text("Loading movie...", fontSize = 22.sp,
-            modifier = Modifier.align(Alignment.Center))
+        if (playbackState == Player.STATE_BUFFERING && error == null) PlaybackLoading()
         error?.let {
             Box(Modifier.fillMaxSize().background(Color(0xDD09090C)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -156,6 +163,28 @@ private fun PlaybackPlayer(movie: Movie, initialPositionMs: Long, progressViewMo
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackLoading() {
+    val transition = rememberInfiniteTransition(label = "playback loading")
+    val pulse by transition.animateFloat(
+        initialValue = .45f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
+        label = "playback pulse",
+    )
+    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(58.dp).alpha(pulse)
+                    .background(HomeFlixColors.Brand, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) { Text("H", fontSize = 30.sp) }
+            Text("Preparing playback", fontSize = 20.sp, color = HomeFlixColors.TextSecondary,
+                modifier = Modifier.padding(top = 18.dp))
         }
     }
 }

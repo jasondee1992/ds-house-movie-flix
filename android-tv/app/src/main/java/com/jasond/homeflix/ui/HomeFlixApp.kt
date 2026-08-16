@@ -2,6 +2,11 @@ package com.jasond.homeflix.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.tween
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -12,16 +17,46 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jasond.homeflix.ui.screens.DetailsScreen
 import com.jasond.homeflix.ui.screens.HomeScreen
 import com.jasond.homeflix.ui.screens.PlayerScreen
+import com.jasond.homeflix.ui.screens.SearchScreen
+import com.jasond.homeflix.ui.screens.LibraryGridScreen
+import com.jasond.homeflix.ui.theme.TvMotion
 
 @Composable
 fun HomeFlixApp(homeViewModel: HomeViewModel = viewModel()) {
     val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = "home") {
+    val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val movies = (homeState as? HomeUiState.Success)?.movies.orEmpty()
+    val navigateSidebar: (String) -> Unit = { route ->
+        if (route == "home") navController.popBackStack("home", inclusive = false)
+        else navController.navigate(route) { launchSingleTop = true }
+    }
+    NavHost(
+        navController = navController,
+        startDestination = "home",
+        enterTransition = { fadeIn(tween(TvMotion.ScreenMillis)) + scaleIn(tween(TvMotion.ScreenMillis), initialScale = .985f) },
+        exitTransition = { fadeOut(tween(TvMotion.ScreenMillis)) + scaleOut(tween(TvMotion.ScreenMillis), targetScale = 1.015f) },
+        popEnterTransition = { fadeIn(tween(TvMotion.ScreenMillis)) },
+        popExitTransition = { fadeOut(tween(TvMotion.ScreenMillis)) },
+    ) {
         composable("home") {
             HomeScreen(
                 viewModel = homeViewModel,
                 onMovieSelected = { movieId -> navController.navigate("details/$movieId") },
+                onPlayMovie = { movieId -> navController.navigate("player/$movieId?startOver=false") },
+                onNavigate = navigateSidebar,
             )
+        }
+        composable("search") {
+            SearchScreen(homeViewModel, { navController.navigate("details/$it") }, navigateSidebar)
+        }
+        composable("movies") {
+            LibraryGridScreen("movies", "Movies", movies, { navController.navigate("details/$it") }, navigateSidebar)
+        }
+        composable("my-list") {
+            LibraryGridScreen("my-list", "My List", emptyList(), { navController.navigate("details/$it") }, navigateSidebar)
+        }
+        composable("settings") {
+            LibraryGridScreen("settings", "Settings", emptyList(), { navController.navigate("details/$it") }, navigateSidebar)
         }
         composable(
             route = "details/{movieId}",
@@ -32,8 +67,10 @@ fun HomeFlixApp(homeViewModel: HomeViewModel = viewModel()) {
             DetailsScreen(
                 movie = homeViewModel.movieById(movieId),
                 progress = progress[movieId],
+                relatedMovies = homeViewModel.relatedMovies(movieId),
                 onLoadProgress = { homeViewModel.loadProgress(movieId) },
                 onPlayMovie = { id, startOver -> navController.navigate("player/$id?startOver=$startOver") },
+                onMovieSelected = { id -> navController.navigate("details/$id") },
                 onBack = navController::popBackStack,
             )
         }
