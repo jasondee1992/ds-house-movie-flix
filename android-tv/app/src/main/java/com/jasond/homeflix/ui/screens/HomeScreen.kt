@@ -55,6 +55,7 @@ fun HomeScreen(
     viewModel: HomeViewModel,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val contentFocus = remember { FocusRequester() }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         CinematicBackground()
         when (val current = state) {
@@ -66,11 +67,12 @@ fun HomeScreen(
                     item.movie.id to (item.progress.progressPercent / 100.0).toFloat()
                 },
                 heroHeight = maxHeight * .64f,
+                contentFocus = contentFocus,
                 onMovieSelected = onMovieSelected,
                 onPlayMovie = onPlayMovie,
             )
         }
-        SidebarNavigation("home", onNavigate)
+        SidebarNavigation("home", onNavigate, onExitToContent = { contentFocus.requestFocus() })
     }
 }
 
@@ -79,6 +81,7 @@ private fun HomeLibrary(
     movies: List<Movie>,
     continueWatching: Map<Long, Float>,
     heroHeight: Dp,
+    contentFocus: FocusRequester,
     onMovieSelected: (Long) -> Unit,
     onPlayMovie: (Long) -> Unit,
 ) {
@@ -92,7 +95,7 @@ private fun HomeLibrary(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 64.dp),
     ) {
-        item { RotatingHero(recent.take(5), heroHeight, onMovieSelected, onPlayMovie) }
+        item { RotatingHero(recent.take(5), heroHeight, contentFocus, onMovieSelected, onPlayMovie) }
         if (continueMovies.isNotEmpty()) item {
             MovieRow("Continue Watching", continueMovies, onMovieSelected,
                 Modifier.padding(start = TvSpacing.SidebarClearance), continueWatching)
@@ -113,12 +116,12 @@ private fun HomeLibrary(
 private fun RotatingHero(
     featured: List<Movie>,
     height: Dp,
+    playFocus: FocusRequester,
     onMoreInfo: (Long) -> Unit,
     onPlay: (Long) -> Unit,
 ) {
     var index by rememberSaveable(featured.map { it.id }) { mutableIntStateOf(0) }
     var heroFocused by remember { mutableStateOf(false) }
-    val playFocus = remember { FocusRequester() }
     LaunchedEffect(featured, heroFocused) {
         if (featured.size <= 1 || heroFocused) return@LaunchedEffect
         while (true) {
@@ -212,7 +215,7 @@ internal fun moviesByCategory(movies: List<Movie>): Map<String, List<Movie>> = m
 @Composable
 private fun CinematicBackground() {
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-        listOf(Color(0xFF19090B), Color(0xFF0E0E11), HomeFlixColors.Background, Color.Black))))
+        listOf(HomeFlixColors.BackgroundLight, HomeFlixColors.Background, HomeFlixColors.BackgroundDark))))
     Box(Modifier.fillMaxSize().background(Brush.radialGradient(
         listOf(Color(0x3DE50914), Color.Transparent), Offset.Zero, 980f)))
 }

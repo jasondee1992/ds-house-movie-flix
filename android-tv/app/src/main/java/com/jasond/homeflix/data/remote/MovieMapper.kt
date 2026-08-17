@@ -1,6 +1,5 @@
 package com.jasond.homeflix.data.remote
 
-import com.jasond.homeflix.BuildConfig
 import com.jasond.homeflix.data.model.Movie
 import com.jasond.homeflix.data.model.Subtitle
 import com.jasond.homeflix.data.model.PlaybackProgress
@@ -35,7 +34,7 @@ fun MovieDto.toDomain(): Movie = Movie(
 
 internal fun resolveApiUrl(url: String): String = runCatching {
     val parsed = URI(url)
-    if (parsed.isAbsolute) parsed.toString() else URI(BuildConfig.API_BASE_URL).resolve(parsed).toString()
+    if (parsed.isAbsolute) parsed.toString() else URI(ApiClient.baseUrl).resolve(parsed).toString()
 }.getOrDefault(url)
 
 fun ProgressDto.toDomain() = PlaybackProgress(

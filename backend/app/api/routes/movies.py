@@ -12,6 +12,7 @@ from app.schemas.movie import MovieResponse, SubtitleResponse
 from app.services.media_stream import (ByteRange, InvalidRange, iter_file_range, parse_range_header,
     resolve_trusted_file, subtitle_content_type, video_content_type)
 from app.services.artwork_catalog import bundled_artwork
+from app.services.artwork_cache import optimized_artwork
 
 router = APIRouter(prefix="/movies", tags=["movies"])
 
@@ -77,7 +78,14 @@ def _image(movie_id: int, attribute: str, session: Session) -> FileResponse:
         ".webp": "image/webp",
     }
     media_type = image_types.get(image.suffix.lower()) or mimetypes.guess_type(image.name)[0] or "application/octet-stream"
-    return FileResponse(image, media_type=media_type)
+    try:
+        target_size = (400, 600) if kind == "poster" else (1280, 720)
+        image = optimized_artwork(image, target_size, kind)
+        media_type = "image/jpeg"
+    except (OSError, ValueError):
+        # Unsupported/corrupt artwork remains available in its original form.
+        pass
+    return FileResponse(image, media_type=media_type, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/{movie_id}/poster", response_model=None)
@@ -86,7 +94,8 @@ def get_poster(movie_id: int, session: Session = Depends(get_session)) -> FileRe
     except HTTPException as error:
         if error.detail != "Image not found": raise
         placeholder = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600"><rect width="400" height="600" fill="#202027"/><text x="200" y="320" text-anchor="middle" fill="#e50914" font-size="72">H</text></svg>'
-        return Response(content=placeholder, media_type="image/svg+xml")
+        return Response(content=placeholder, media_type="image/svg+xml",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/{movie_id}/backdrop", response_model=None)

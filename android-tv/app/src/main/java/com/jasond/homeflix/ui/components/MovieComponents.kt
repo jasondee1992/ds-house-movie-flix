@@ -144,7 +144,11 @@ fun MovieRow(
 
 @Composable
 fun PosterImage(url: String?, title: String, modifier: Modifier = Modifier) {
-    val request = ImageRequest.Builder(LocalContext.current).data(url).crossfade(250).build()
+    val request = ImageRequest.Builder(LocalContext.current)
+        .data(url)
+        .size(400, 600)
+        .crossfade(150)
+        .build()
     SubcomposeAsyncImage(
         model = request,
         contentDescription = "$title poster",

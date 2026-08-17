@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -53,6 +54,7 @@ fun SearchScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val movies = (state as? HomeUiState.Success)?.movies.orEmpty()
     var query by rememberSaveable { mutableStateOf("") }
+    val contentFocus = remember { FocusRequester() }
     val results = remember(movies, query) {
         val needle = query.trim()
         if (needle.isBlank()) emptyList() else movies.filter { movie ->
@@ -62,10 +64,10 @@ fun SearchScreen(
         }
     }
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-        listOf(Color(0xFF16090B), HomeFlixColors.Background, Color.Black)))) {
+        listOf(HomeFlixColors.BackgroundLight, HomeFlixColors.Background, HomeFlixColors.BackgroundDark)))) {
         Column(Modifier.fillMaxSize().padding(start = 104.dp, top = 52.dp, end = 48.dp)) {
             Text("Search HomeFlix", fontSize = 34.sp, fontWeight = FontWeight.Black)
-            SearchField(query, { query = it })
+            SearchField(query, { query = it }, contentFocus)
             when {
                 query.isBlank() -> SearchPrompt()
                 results.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -92,13 +94,12 @@ fun SearchScreen(
                 }
             }
         }
-        SidebarNavigation("search", onNavigate)
+        SidebarNavigation("search", onNavigate, onExitToContent = { contentFocus.requestFocus() })
     }
 }
 
 @Composable
-private fun SearchField(value: String, onValueChanged: (String) -> Unit) {
-    val requester = remember { FocusRequester() }
+private fun SearchField(value: String, onValueChanged: (String) -> Unit, requester: FocusRequester) {
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     var focused by remember { mutableStateOf(false) }
@@ -119,7 +120,7 @@ private fun SearchField(value: String, onValueChanged: (String) -> Unit) {
         cursorBrush = SolidColor(HomeFlixColors.Brand),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { leaveInput() }),
-        modifier = Modifier.fillMaxWidth(.62f).height(58.dp).padding(top = 16.dp)
+        modifier = Modifier.fillMaxWidth(.62f).padding(top = 16.dp).height(58.dp)
             .focusRequester(requester)
             .onFocusChanged { focused = it.isFocused }
             .onPreviewKeyEvent { event ->
@@ -156,6 +157,7 @@ fun LibraryGridScreen(
     onMovieSelected: (Long) -> Unit,
     onNavigate: (String) -> Unit,
 ) {
+    val contentFocus = remember { FocusRequester() }
     Box(Modifier.fillMaxSize().background(HomeFlixColors.Background)) {
         Column(Modifier.fillMaxSize().padding(start = 104.dp, top = 52.dp, end = 48.dp)) {
             Text(title, fontSize = 34.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(bottom = 26.dp))
@@ -166,9 +168,15 @@ fun LibraryGridScreen(
                 verticalArrangement = Arrangement.spacedBy(28.dp),
                 contentPadding = PaddingValues(bottom = 52.dp),
             ) {
-                items(movies, key = { it.id }) { movie -> MoviePosterCard(movie, { onMovieSelected(movie.id) }) }
+                itemsIndexed(movies, key = { _, movie -> movie.id }) { index, movie ->
+                    MoviePosterCard(
+                        movie,
+                        { onMovieSelected(movie.id) },
+                        modifier = if (index == 0) Modifier.focusRequester(contentFocus) else Modifier,
+                    )
+                }
             }
         }
-        SidebarNavigation(route, onNavigate)
+        SidebarNavigation(route, onNavigate, onExitToContent = { contentFocus.requestFocus() })
     }
 }

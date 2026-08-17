@@ -2,12 +2,19 @@ package com.jasond.homeflix.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.tween
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -19,10 +26,67 @@ import com.jasond.homeflix.ui.screens.HomeScreen
 import com.jasond.homeflix.ui.screens.PlayerScreen
 import com.jasond.homeflix.ui.screens.SearchScreen
 import com.jasond.homeflix.ui.screens.LibraryGridScreen
+import com.jasond.homeflix.ui.screens.ServerSetupScreen
+import com.jasond.homeflix.ui.screens.SplashScreen
 import com.jasond.homeflix.ui.theme.TvMotion
+import com.jasond.homeflix.data.HomeRepository
+import com.jasond.homeflix.data.ServerPreferences
+import com.jasond.homeflix.data.remote.ApiClient
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.withTimeout
+
+private enum class AppStage { SPLASH, CHECKING_SERVER, SERVER_SETUP, LIBRARY }
 
 @Composable
-fun HomeFlixApp(homeViewModel: HomeViewModel = viewModel()) {
+fun HomeFlixApp() {
+    val context = LocalContext.current
+    val serverPreferences = remember(context) { ServerPreferences(context) }
+    var stage by remember { mutableStateOf(AppStage.SPLASH) }
+    var sessionServerUrl by remember { mutableStateOf<String?>(null) }
+    when (stage) {
+        AppStage.SPLASH -> SplashScreen {
+            val savedUrl = serverPreferences.loadServerUrl()
+            if (savedUrl == null) stage = AppStage.SERVER_SETUP
+            else {
+                sessionServerUrl = savedUrl
+                stage = AppStage.CHECKING_SERVER
+            }
+        }
+        AppStage.CHECKING_SERVER -> {
+            SplashScreen { }
+            LaunchedEffect(sessionServerUrl) {
+                val url = sessionServerUrl ?: return@LaunchedEffect
+                val connected = runCatching {
+                    val response = withTimeout(6_000) { ApiClient.createService(url).health() }
+                    response.status == "ok" && response.service == "homeflix"
+                }.getOrDefault(false)
+                if (connected) {
+                    ApiClient.configure(url)
+                    stage = AppStage.LIBRARY
+                } else stage = AppStage.SERVER_SETUP
+            }
+        }
+        AppStage.SERVER_SETUP -> ServerSetupScreen(initialAddress = sessionServerUrl.orEmpty()) { url ->
+            serverPreferences.saveServerUrl(url)
+            sessionServerUrl = url
+            stage = AppStage.LIBRARY
+        }
+        AppStage.LIBRARY -> key(sessionServerUrl) {
+            val factory = remember(sessionServerUrl) {
+                object : ViewModelProvider.Factory {
+                    @Suppress("UNCHECKED_CAST")
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                        HomeViewModel(HomeRepository(ApiClient.service)) as T
+                }
+            }
+            val homeViewModel: HomeViewModel = viewModel(key = "home-${sessionServerUrl.orEmpty()}", factory = factory)
+            HomeFlixLibrary(homeViewModel)
+        }
+    }
+}
+
+@Composable
+private fun HomeFlixLibrary(homeViewModel: HomeViewModel) {
     val navController = rememberNavController()
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val movies = (homeState as? HomeUiState.Success)?.movies.orEmpty()

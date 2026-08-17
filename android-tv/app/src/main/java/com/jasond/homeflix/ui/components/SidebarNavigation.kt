@@ -4,14 +4,20 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -19,6 +25,7 @@ import androidx.compose.ui.zIndex
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
+import com.jasond.homeflix.R
 import com.jasond.homeflix.ui.theme.HomeFlixColors
 import com.jasond.homeflix.ui.theme.TvMotion
 
@@ -36,6 +43,7 @@ val HomeFlixSidebarItems = listOf(
 fun SidebarNavigation(
     selectedRoute: String,
     onNavigate: (String) -> Unit,
+    onExitToContent: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -44,19 +52,26 @@ fun SidebarNavigation(
     Column(
         modifier.width(width).fillMaxHeight().zIndex(10f)
             .onFocusChanged { expanded = it.hasFocus }
+            .onPreviewKeyEvent { event ->
+                if (event.key == Key.DirectionRight && event.type == KeyEventType.KeyDown) {
+                    onExitToContent()
+                    true
+                } else false
+            }
             .background(
                 Brush.horizontalGradient(
-                    listOf(Color(0xF2070708), Color(0xE6070708), Color(0x00070708)),
+                    listOf(Color(0xF2030B1B), Color(0xE6030B1B), Color(0x00030B1B)),
                 ),
             )
             .padding(start = 12.dp, end = if (expanded) 22.dp else 12.dp, top = 34.dp, bottom = 30.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(48.dp)) {
-            Box(
-                Modifier.size(42.dp).background(HomeFlixColors.Brand, RoundedCornerShape(7.dp)),
-                contentAlignment = Alignment.Center,
-            ) { Text("H", fontSize = 24.sp, fontWeight = FontWeight.Black) }
-            if (expanded) Text("HOMEFLIX", fontWeight = FontWeight.Black, fontSize = 19.sp,
+            Image(
+                painterResource(R.drawable.ds_app_icon),
+                "DS Home Flix logo",
+                Modifier.size(42.dp),
+            )
+            if (expanded) Text("DS CINEMA", fontWeight = FontWeight.Black, fontSize = 19.sp,
                 modifier = Modifier.padding(start = 12.dp))
         }
         Spacer(Modifier.weight(1f))
