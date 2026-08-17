@@ -125,12 +125,6 @@ fun ServerSetupScreen(initialAddress: String = "", onConnected: (String) -> Unit
             }
             Spacer(Modifier.width(90.dp))
             Column(Modifier.weight(1.28f)) {
-                Text(
-                    "Please enter Server address",
-                    color = HomeFlixColors.TextPrimary,
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Black,
-                )
                 BasicTextField(
                     value = address,
                     onValueChange = { address = it.trim(); error = null },
@@ -140,7 +134,7 @@ fun ServerSetupScreen(initialAddress: String = "", onConnected: (String) -> Unit
                     cursorBrush = SolidColor(HomeFlixColors.Brand),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { leaveInput() }),
-                    modifier = Modifier.fillMaxWidth().padding(top = 24.dp).height(62.dp)
+                    modifier = Modifier.fillMaxWidth().height(62.dp)
                         .focusRequester(inputFocus)
                         .onFocusChanged { inputFocused = it.isFocused }
                         .onPreviewKeyEvent { event ->
@@ -152,7 +146,7 @@ fun ServerSetupScreen(initialAddress: String = "", onConnected: (String) -> Unit
                         .border(2.dp, if (inputFocused) Color.White else Color(0xFF5B5B63), RoundedCornerShape(8.dp))
                         .padding(horizontal = 20.dp, vertical = 15.dp),
                     decorationBox = { field -> Box {
-                        if (address.isBlank()) Text("Example: 192.168.1.25:8000",
+                        if (address.isBlank()) Text("Please enter Server address",
                             color = HomeFlixColors.TextSecondary, fontSize = 19.sp)
                         field()
                     } },

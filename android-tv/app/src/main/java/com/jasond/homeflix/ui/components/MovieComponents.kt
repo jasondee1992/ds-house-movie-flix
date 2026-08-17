@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.tv.material3.Card
@@ -42,6 +43,8 @@ import com.jasond.homeflix.data.model.Movie
 import com.jasond.homeflix.ui.theme.HomeFlixColors
 import com.jasond.homeflix.ui.theme.TvMotion
 import com.jasond.homeflix.ui.theme.TvSpacing
+import com.jasond.homeflix.ui.theme.TvDimensions
+import com.jasond.homeflix.ui.format.formatRuntime
 
 @Composable
 fun MoviePosterCard(
@@ -50,15 +53,17 @@ fun MoviePosterCard(
     modifier: Modifier = Modifier,
     progress: Float? = null,
     onFocused: (() -> Unit)? = null,
+    cardWidth: Dp = 166.dp,
+    focusedScale: Float = TvDimensions.FocusScale,
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (focused) 1.08f else 1f,
+        targetValue = if (focused) focusedScale else 1f,
         animationSpec = tween(TvMotion.FocusMillis),
         label = "poster focus",
     )
     Column(
-        modifier.width(166.dp).zIndex(if (focused) 1f else 0f).scale(scale),
+        modifier.width(cardWidth).zIndex(if (focused) 1f else 0f).scale(scale),
         horizontalAlignment = Alignment.Start,
     ) {
         Card(
@@ -68,9 +73,9 @@ fun MoviePosterCard(
                     focused = it.isFocused
                     if (it.isFocused) onFocused?.invoke()
                 }
-                .then(if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(7.dp)) else Modifier),
+                .then(if (focused) Modifier.border(TvDimensions.FocusBorder, Color.White, RoundedCornerShape(TvDimensions.CardRadius)) else Modifier),
             colors = CardDefaults.colors(containerColor = HomeFlixColors.Surface),
-            shape = CardDefaults.shape(RoundedCornerShape(7.dp)),
+            shape = CardDefaults.shape(RoundedCornerShape(TvDimensions.CardRadius)),
         ) {
             Box(Modifier.fillMaxSize()) {
                 PosterImage(movie.posterUrl, movie.title)
@@ -91,18 +96,11 @@ fun MoviePosterCard(
                 }
             }
         }
-        Text(
-            movie.title,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontSize = 15.sp,
-            fontWeight = if (focused) FontWeight.Bold else FontWeight.Medium,
-            color = if (focused) HomeFlixColors.TextPrimary else HomeFlixColors.TextSecondary,
-            modifier = Modifier.padding(top = 10.dp).alpha(if (focused) 1f else .92f),
-        )
-        if (focused) {
+        Column(Modifier.height(47.dp).padding(top = 8.dp).alpha(if (focused) 1f else 0f)) {
+            Text(movie.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp,
+                fontWeight = FontWeight.Bold, color = HomeFlixColors.TextPrimary)
             Text(
-                listOfNotNull(movie.year?.toString(), movie.quality).joinToString("  |  "),
+                listOfNotNull(movie.year?.toString(), formatRuntime(movie.durationSeconds)).joinToString("  •  "),
                 color = HomeFlixColors.TextSecondary,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 3.dp),
@@ -119,6 +117,7 @@ fun MovieRow(
     onMovieSelected: (Long) -> Unit,
     modifier: Modifier = Modifier,
     progressByMovie: Map<Long, Float> = emptyMap(),
+    onMovieFocused: (Movie) -> Unit = {},
 ) {
     Column(modifier.padding(bottom = TvSpacing.RowGap)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -129,13 +128,14 @@ fun MovieRow(
         LazyRow(
             modifier = Modifier.fillMaxWidth().padding(top = 14.dp).focusRestorer().focusGroup(),
             horizontalArrangement = Arrangement.spacedBy(TvSpacing.CardGap),
-            contentPadding = PaddingValues(end = 72.dp, top = 8.dp, bottom = 16.dp),
+            contentPadding = PaddingValues(start = 14.dp, end = 82.dp, top = 14.dp, bottom = 22.dp),
         ) {
             itemsIndexed(movies, key = { _, movie -> movie.id }) { _, movie ->
                 MoviePosterCard(
                     movie = movie,
                     progress = progressByMovie[movie.id],
                     onClick = { onMovieSelected(movie.id) },
+                    onFocused = { onMovieFocused(movie) },
                 )
             }
         }
@@ -144,15 +144,12 @@ fun MovieRow(
 
 @Composable
 fun PosterImage(url: String?, title: String, modifier: Modifier = Modifier) {
-    val request = ImageRequest.Builder(LocalContext.current)
-        .data(url)
-        .size(400, 600)
-        .crossfade(150)
-        .build()
+    val context = LocalContext.current
+    val request = remember(url) { ImageRequest.Builder(context).data(url).size(400, 600).crossfade(180).build() }
     SubcomposeAsyncImage(
         model = request,
         contentDescription = "$title poster",
-        modifier = modifier.fillMaxSize().clip(RoundedCornerShape(7.dp)),
+        modifier = modifier.fillMaxSize().clip(RoundedCornerShape(TvDimensions.CardRadius)),
         contentScale = ContentScale.Crop,
     ) {
         if (painter.state is AsyncImagePainter.State.Success) SubcomposeAsyncImageContent()

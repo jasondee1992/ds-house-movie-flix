@@ -5,7 +5,8 @@ from sqlalchemy import select
 from app.db.database import Database
 from app.models.movie import Movie
 from app.services.media_scanner import (clean_title, discover_subtitles, find_backdrop,
-    find_poster, parse_title_year, scan_media_directories)
+                                        find_poster, parse_title_year, scan_media_directories,
+                                        sidecar_description)
 from app.models.movie import Subtitle
 from app.services.movie_metadata import catalog_genre, sidecar_genre
 
@@ -79,6 +80,14 @@ def test_any_image_in_movie_folder_can_be_the_poster(tmp_path: Path) -> None:
     movie = folder / "Movie.mp4"; movie.touch()
     (folder / "artwork.webp").touch()
     assert find_poster(movie).name == "artwork.webp"
+
+
+def test_description_sidecar_is_normalized_and_discovered(tmp_path: Path) -> None:
+    movie = tmp_path / "Movie (2026).mp4"
+    movie.write_bytes(b"video")
+    (tmp_path / "DESCRIPTION.TXT").write_text("A hero\n  returns home.\n", encoding="utf-8")
+
+    assert sidecar_description(movie) == "A hero returns home."
 
 
 def test_genre_sidecar_and_catalog_metadata(tmp_path: Path) -> None:

@@ -77,6 +77,22 @@ def find_backdrop(movie_path: Path) -> Path | None:
     return next((files[name.lower()].resolve() for name in names if name.lower() in files), None)
 
 
+def sidecar_description(movie_path: Path) -> str | None:
+    """Read a durable, user-editable plot description stored beside the movie."""
+    files = _case_insensitive_files(movie_path.parent)
+    for name in ("description.txt", "plot.txt", "synopsis.txt"):
+        path = files.get(name)
+        if path is None:
+            continue
+        try:
+            description = " ".join(path.read_text(encoding="utf-8-sig").split()).strip()
+        except (OSError, UnicodeError):
+            continue
+        if description:
+            return description[:4_000]
+    return None
+
+
 def subtitle_language(path: Path) -> str:
     tokens = {token.lower() for token in re.split(r"[._\-\s]+", path.stem) if token}
     mappings = {
@@ -186,9 +202,10 @@ def scan_media_directories(session: Session, media_dirs: tuple[Path, ...]) -> Sc
             year = folder_year or file_year
             poster, backdrop = find_poster(path), find_backdrop(path)
             genre = sidecar_genre(path) or catalog_genre(path.parent.name, year) or "Other"
+            description = sidecar_description(path)
             values = dict(title=title, year=year, file_name=path.name, file_path=str(path), normalized_path=path_key,
                           media_root=root_key, media_directory=str(path.parent), file_extension=path.suffix.lower(),
-                          file_size=stat.st_size, date_modified=modified, genre=genre,
+                          file_size=stat.st_size, date_modified=modified, genre=genre, description=description,
                           poster_path=str(poster) if poster else None, backdrop_path=str(backdrop) if backdrop else None)
             movie = existing.get(path_key)
             if movie is None:

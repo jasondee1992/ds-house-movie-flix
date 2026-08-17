@@ -10,12 +10,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
@@ -25,14 +28,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -50,6 +59,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import com.jasond.homeflix.data.model.Movie
 import com.jasond.homeflix.ui.PlayerProgressState
@@ -57,6 +67,7 @@ import com.jasond.homeflix.ui.PlayerViewModel
 import com.jasond.homeflix.ui.player.buildMediaItem
 import com.jasond.homeflix.ui.player.seekStepMs
 import com.jasond.homeflix.ui.player.seekTarget
+import com.jasond.homeflix.ui.player.subtitleLanguageCode
 import com.jasond.homeflix.ui.theme.HomeFlixColors
 import kotlinx.coroutines.delay
 
@@ -96,13 +107,19 @@ private fun PlaybackPlayer(
     var interactionVersion by remember { mutableIntStateOf(0) }
     var positionMs by remember { mutableLongStateOf(initialPositionMs) }
     var durationMs by remember { mutableLongStateOf(C.TIME_UNSET) }
-    var seekIndicator by remember { mutableStateOf<String?>(null) }
+    var seekIndicator by remember { mutableStateOf<SeekFeedback?>(null) }
     var seekIndicatorVersion by remember { mutableIntStateOf(0) }
     var leaving by remember { mutableStateOf(false) }
-    var focusDestination by remember { mutableStateOf(ControlFocus.PLAY) }
+    var focusedControl by remember { mutableStateOf(ControlFocus.PLAY) }
+    var menuReturnFocus by remember { mutableStateOf(ControlFocus.SETTINGS) }
     val surfaceFocus = remember { FocusRequester() }
+    val backFocus = remember { FocusRequester() }
+    val rewindFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
+    val forwardFocus = remember { FocusRequester() }
+    val scrubFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
+    val subtitlesFocus = remember { FocusRequester() }
     val firstSettingFocus = remember { FocusRequester() }
 
     val player = remember(movie.id, initialPositionMs) {
@@ -141,9 +158,10 @@ private fun PlaybackPlayer(
     }
 
     fun touchControls(requestPlayFocus: Boolean = false) {
+        val wasHidden = !controlsVisible
         controlsVisible = true
         interactionVersion++
-        if (requestPlayFocus) focusDestination = ControlFocus.PLAY
+        if (requestPlayFocus || wasHidden) focusedControl = ControlFocus.PLAY
     }
     fun save() = progressViewModel.save(player.currentPosition, player.duration)
     fun exit() {
@@ -156,7 +174,7 @@ private fun PlaybackPlayer(
         val amount = seekStepMs(repeatCount) * direction
         player.seekTo(seekTarget(player.currentPosition, player.duration, amount))
         positionMs = player.currentPosition
-        seekIndicator = if (amount > 0) "+${amount / 1_000}s" else "${amount / 1_000}s"
+        seekIndicator = SeekFeedback(direction = direction, seconds = kotlin.math.abs(amount / 1_000).toInt())
         seekIndicatorVersion++
         touchControls()
     }
@@ -168,8 +186,8 @@ private fun PlaybackPlayer(
             delay(if (controlsVisible) 250 else 1_000)
         }
     }
-    LaunchedEffect(interactionVersion, controlsVisible, settingsVisible, wantsToPlay) {
-        if (controlsVisible && !settingsVisible && wantsToPlay) {
+    LaunchedEffect(interactionVersion, controlsVisible, settingsVisible, wantsToPlay, focusedControl) {
+        if (controlsVisible && !settingsVisible && wantsToPlay && focusedControl != ControlFocus.SCRUB) {
             delay(CONTROLS_TIMEOUT_MS)
             controlsVisible = false
             surfaceFocus.requestFocus()
@@ -181,12 +199,19 @@ private fun PlaybackPlayer(
             seekIndicator = null
         }
     }
-    LaunchedEffect(controlsVisible, settingsVisible, focusDestination) {
+    // Only restore focus when an overlay opens/closes. Focus changes inside the row must not
+    // restart this effect, otherwise DPAD navigation is immediately pulled back to Play/Pause.
+    LaunchedEffect(controlsVisible, settingsVisible) {
         if (!controlsVisible && !settingsVisible) return@LaunchedEffect
         withFrameNanos { }
         when {
             settingsVisible -> firstSettingFocus.requestFocus()
-            focusDestination == ControlFocus.SETTINGS -> settingsFocus.requestFocus()
+            focusedControl == ControlFocus.SETTINGS -> settingsFocus.requestFocus()
+            focusedControl == ControlFocus.SUBTITLES -> subtitlesFocus.requestFocus()
+            focusedControl == ControlFocus.FORWARD -> forwardFocus.requestFocus()
+            focusedControl == ControlFocus.REWIND -> rewindFocus.requestFocus()
+            focusedControl == ControlFocus.SCRUB -> scrubFocus.requestFocus()
+            focusedControl == ControlFocus.BACK -> backFocus.requestFocus()
             else -> playFocus.requestFocus()
         }
     }
@@ -236,7 +261,7 @@ private fun PlaybackPlayer(
         when {
             settingsVisible -> {
                 settingsVisible = false
-                focusDestination = ControlFocus.SETTINGS
+                focusedControl = menuReturnFocus
                 touchControls()
             }
             else -> exit()
@@ -245,7 +270,7 @@ private fun PlaybackPlayer(
     fun handleBack() {
         if (settingsVisible) {
             settingsVisible = false
-            focusDestination = ControlFocus.SETTINGS
+            focusedControl = menuReturnFocus
             touchControls()
         } else exit()
     }
@@ -262,10 +287,15 @@ private fun PlaybackPlayer(
                     return@onPreviewKeyEvent true
                 }
                 if (event.type != KeyEventType.KeyDown || error != null) return@onPreviewKeyEvent false
+                if (controlsVisible) interactionVersion++
                 val repeat = event.nativeKeyEvent.repeatCount
                 when (event.key) {
-                    Key.DirectionLeft -> if (!settingsVisible) { seek(-1, repeat); true } else false
-                    Key.DirectionRight -> if (!settingsVisible) { seek(1, repeat); true } else false
+                    Key.DirectionLeft -> if (!settingsVisible && !controlsVisible) {
+                        seek(-1, repeat); true
+                    } else false
+                    Key.DirectionRight -> if (!settingsVisible && !controlsVisible) {
+                        seek(1, repeat); true
+                    } else false
                     Key.DirectionUp, Key.DirectionDown -> if (!controlsVisible) {
                         touchControls(requestPlayFocus = true); true
                     } else false
@@ -310,14 +340,28 @@ private fun PlaybackPlayer(
                 durationMs = durationMs,
                 isPlaying = wantsToPlay,
                 playFocus = playFocus,
+                backFocus = backFocus,
+                rewindFocus = rewindFocus,
+                forwardFocus = forwardFocus,
+                scrubFocus = scrubFocus,
                 settingsFocus = settingsFocus,
+                subtitlesFocus = subtitlesFocus,
                 onInteraction = { touchControls() },
+                onControlFocused = { focusedControl = it; interactionVersion++ },
+                onBack = ::exit,
                 onSeekBack = { seek(-1, 0) },
                 onPlayPause = { if (player.playWhenReady) player.pause() else player.play(); touchControls() },
                 onSeekForward = { seek(1, 0) },
-                onSettings = {
+                onSubtitles = {
+                    menuReturnFocus = ControlFocus.SUBTITLES
                     settingsVisible = true
-                    focusDestination = ControlFocus.FIRST_SETTING
+                    focusedControl = ControlFocus.SUBTITLES
+                    interactionVersion++
+                },
+                onSettings = {
+                    menuReturnFocus = ControlFocus.SETTINGS
+                    settingsVisible = true
+                    focusedControl = ControlFocus.SETTINGS
                     interactionVersion++
                 },
             )
@@ -328,11 +372,21 @@ private fun PlaybackPlayer(
         if (settingsVisible && error == null) {
             PlaybackSettings(
                 selectedSpeed = player.playbackParameters.speed,
+                subtitles = movie.subtitles.map { it.language }.distinct(),
                 firstFocus = firstSettingFocus,
                 onSelect = { speed ->
                     player.setPlaybackSpeed(speed)
                     settingsVisible = false
-                    focusDestination = ControlFocus.SETTINGS
+                    focusedControl = menuReturnFocus
+                    touchControls()
+                },
+                onSubtitle = { language ->
+                    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, language == null)
+                        .setPreferredTextLanguage(language?.let(::subtitleLanguageCode))
+                        .build()
+                    settingsVisible = false
+                    focusedControl = ControlFocus.SUBTITLES
                     touchControls()
                 },
             )
@@ -358,12 +412,20 @@ private fun PlayerControls(
     positionMs: Long,
     durationMs: Long,
     isPlaying: Boolean,
+    backFocus: FocusRequester,
+    rewindFocus: FocusRequester,
     playFocus: FocusRequester,
+    forwardFocus: FocusRequester,
+    scrubFocus: FocusRequester,
     settingsFocus: FocusRequester,
+    subtitlesFocus: FocusRequester,
     onInteraction: () -> Unit,
+    onControlFocused: (ControlFocus) -> Unit,
+    onBack: () -> Unit,
     onSeekBack: () -> Unit,
     onPlayPause: () -> Unit,
     onSeekForward: () -> Unit,
+    onSubtitles: () -> Unit,
     onSettings: () -> Unit,
 ) {
     Box(
@@ -371,63 +433,218 @@ private fun PlayerControls(
             Brush.verticalGradient(listOf(Color(0x66000000), Color.Transparent, Color(0xE6000000))),
         ),
     ) {
-        Text(
-            movie.title,
-            color = Color.White,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.TopStart).padding(42.dp),
-        )
+        Row(
+            Modifier.align(Alignment.TopStart).padding(start = 42.dp, top = 34.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PlayerIconButton(
+                PlayerControlIcon.BACK, "Exit playback", onBack,
+                Modifier.focusRequester(backFocus).focusProperties { down = scrubFocus },
+                onInteraction, { onControlFocused(ControlFocus.BACK) }, compact = true,
+            )
+            Text(movie.title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 16.dp))
+        }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 54.dp, vertical = 36.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(formatTime(positionMs), color = Color.White, fontSize = 15.sp)
                 Text(formatTime(durationMs), color = Color.White, fontSize = 15.sp)
             }
-            PlaybackProgress(positionMs, durationMs)
+            PlaybackProgress(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                modifier = Modifier.focusRequester(scrubFocus).focusProperties {
+                    up = backFocus
+                    down = playFocus
+                },
+                onFocused = { onControlFocused(ControlFocus.SCRUB); onInteraction() },
+                onSeekBack = onSeekBack,
+                onSeekForward = onSeekForward,
+            )
             Row(
-                Modifier.fillMaxWidth().padding(top = 18.dp),
+                Modifier.fillMaxWidth().padding(top = 18.dp).focusGroup(),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                PlayerButton("-10s", onSeekBack, Modifier, onInteraction)
+                PlayerIconButton(PlayerControlIcon.REWIND, "Rewind 10 seconds", onSeekBack,
+                    Modifier.focusRequester(rewindFocus).focusProperties { right = playFocus; up = scrubFocus }, onInteraction,
+                    { onControlFocused(ControlFocus.REWIND) })
                 Spacer(Modifier.width(18.dp))
-                PlayerButton(if (isPlaying) "Pause" else "Play", onPlayPause,
-                    Modifier.focusRequester(playFocus), onInteraction)
+                PlayerIconButton(if (isPlaying) PlayerControlIcon.PAUSE else PlayerControlIcon.PLAY,
+                    if (isPlaying) "Pause" else "Play", onPlayPause,
+                    Modifier.focusRequester(playFocus).focusProperties {
+                        left = rewindFocus; right = forwardFocus; up = scrubFocus
+                    }, onInteraction, { onControlFocused(ControlFocus.PLAY) }, primary = true)
                 Spacer(Modifier.width(18.dp))
-                PlayerButton("+10s", onSeekForward, Modifier, onInteraction)
+                PlayerIconButton(PlayerControlIcon.FORWARD, "Forward 10 seconds", onSeekForward,
+                    Modifier.focusRequester(forwardFocus).focusProperties {
+                        left = playFocus; right = subtitlesFocus; up = scrubFocus
+                    }, onInteraction,
+                    { onControlFocused(ControlFocus.FORWARD) })
+                Spacer(Modifier.width(34.dp))
+                PlayerIconButton(PlayerControlIcon.SUBTITLES, "Audio and subtitles", onSubtitles,
+                    Modifier.focusRequester(subtitlesFocus).focusProperties {
+                        left = forwardFocus; right = settingsFocus; up = scrubFocus
+                    }, onInteraction, { onControlFocused(ControlFocus.SUBTITLES) })
+                Spacer(Modifier.width(14.dp))
+                PlayerIconButton(PlayerControlIcon.SETTINGS, "Settings", onSettings,
+                    Modifier.focusRequester(settingsFocus).focusProperties { left = subtitlesFocus; up = scrubFocus },
+                    onInteraction, { onControlFocused(ControlFocus.SETTINGS) })
             }
-            PlayerButton(
-                "Settings",
-                onSettings,
-                Modifier.align(Alignment.CenterHorizontally).padding(top = 10.dp).focusRequester(settingsFocus),
-                onInteraction,
-            )
         }
     }
 }
 
 @Composable
-private fun PlayerButton(
+private fun PlayerIconButton(
+    icon: PlayerControlIcon,
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onInteraction: () -> Unit,
+    onFocused: () -> Unit,
+    primary: Boolean = false,
+    compact: Boolean = false,
 ) {
-    Button(onClick = { onInteraction(); onClick() }, modifier = modifier) {
-        Text(label, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp))
+    var focused by remember { mutableStateOf(false) }
+    val focusScale by animateFloatAsState(if (focused) 1.1f else 1f, tween(150), label = "player control focus")
+    val size = when {
+        primary -> 66.dp
+        compact -> 48.dp
+        else -> 54.dp
+    }
+    Button(
+        onClick = { onInteraction(); onClick() },
+        modifier = modifier.size(size).scale(focusScale)
+            .onFocusChanged { state -> focused = state.isFocused; if (state.isFocused) onFocused() }
+            .then(if (focused) Modifier.border(2.dp, HomeFlixColors.Brand, CircleShape) else Modifier)
+            .semantics { contentDescription = label },
+        contentPadding = PaddingValues(0.dp),
+        colors = ButtonDefaults.colors(
+            containerColor = Color(0xB326262B),
+            focusedContainerColor = Color(0xF2505057),
+            contentColor = Color(0xFFD7D7DB),
+            focusedContentColor = Color.White,
+        ),
+        shape = ButtonDefaults.shape(CircleShape),
+    ) {
+        PlayerControlGlyph(icon, Modifier.size(if (primary) 30.dp else if (compact) 23.dp else 25.dp))
     }
 }
 
 @Composable
-private fun PlaybackProgress(positionMs: Long, durationMs: Long) {
+private fun PlayerControlGlyph(icon: PlayerControlIcon, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val white = Color.White
+        when (icon) {
+            PlayerControlIcon.BACK -> {
+                drawLine(white, androidx.compose.ui.geometry.Offset(size.width * .78f, size.height * .5f),
+                    androidx.compose.ui.geometry.Offset(size.width * .2f, size.height * .5f), size.minDimension * .1f)
+                drawLine(white, androidx.compose.ui.geometry.Offset(size.width * .2f, size.height * .5f),
+                    androidx.compose.ui.geometry.Offset(size.width * .47f, size.height * .23f), size.minDimension * .1f)
+                drawLine(white, androidx.compose.ui.geometry.Offset(size.width * .2f, size.height * .5f),
+                    androidx.compose.ui.geometry.Offset(size.width * .47f, size.height * .77f), size.minDimension * .1f)
+            }
+            PlayerControlIcon.PLAY -> drawPath(Path().apply {
+                moveTo(size.width * .28f, size.height * .15f)
+                lineTo(size.width * .82f, size.height * .5f)
+                lineTo(size.width * .28f, size.height * .85f)
+                close()
+            }, white)
+            PlayerControlIcon.PAUSE -> {
+                drawRoundRect(white, topLeft = androidx.compose.ui.geometry.Offset(size.width * .22f, size.height * .15f),
+                    size = androidx.compose.ui.geometry.Size(size.width * .2f, size.height * .7f))
+                drawRoundRect(white, topLeft = androidx.compose.ui.geometry.Offset(size.width * .58f, size.height * .15f),
+                    size = androidx.compose.ui.geometry.Size(size.width * .2f, size.height * .7f))
+            }
+            PlayerControlIcon.REWIND, PlayerControlIcon.FORWARD -> {
+                val forward = icon == PlayerControlIcon.FORWARD
+                fun triangle(start: Float) = Path().apply {
+                    if (forward) {
+                        moveTo(size.width * start, size.height * .2f)
+                        lineTo(size.width * (start + .34f), size.height * .5f)
+                        lineTo(size.width * start, size.height * .8f)
+                    } else {
+                        moveTo(size.width * (1f - start), size.height * .2f)
+                        lineTo(size.width * (1f - start - .34f), size.height * .5f)
+                        lineTo(size.width * (1f - start), size.height * .8f)
+                    }
+                    close()
+                }
+                drawPath(triangle(.12f), white)
+                drawPath(triangle(.46f), white)
+            }
+            PlayerControlIcon.SETTINGS -> {
+                drawCircle(white, radius = size.minDimension * .34f, style = Stroke(size.minDimension * .12f))
+                drawCircle(white, radius = size.minDimension * .09f)
+            }
+            PlayerControlIcon.SUBTITLES -> {
+                drawRoundRect(white, topLeft = androidx.compose.ui.geometry.Offset(size.width * .1f, size.height * .2f),
+                    size = androidx.compose.ui.geometry.Size(size.width * .8f, size.height * .6f), style = Stroke(size.minDimension * .09f))
+                drawLine(white, androidx.compose.ui.geometry.Offset(size.width * .25f, size.height * .58f),
+                    androidx.compose.ui.geometry.Offset(size.width * .48f, size.height * .58f), size.minDimension * .07f)
+                drawLine(white, androidx.compose.ui.geometry.Offset(size.width * .55f, size.height * .58f),
+                    androidx.compose.ui.geometry.Offset(size.width * .76f, size.height * .58f), size.minDimension * .07f)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackProgress(
+    positionMs: Long,
+    durationMs: Long,
+    modifier: Modifier = Modifier,
+    onFocused: () -> Unit,
+    onSeekBack: () -> Unit,
+    onSeekForward: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
     val progress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-    Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(7.dp).background(Color(0xFF67676F), RoundedCornerShape(4.dp))) {
-        Box(Modifier.fillMaxHeight().fillMaxWidth(progress).background(HomeFlixColors.Brand, RoundedCornerShape(4.dp)))
+    BoxWithConstraints(
+        modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp).height(if (focused) 52.dp else 22.dp)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> { onSeekBack(); true }
+                    Key.DirectionRight -> { onSeekForward(); true }
+                    else -> false
+                }
+            }
+            .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }
+            .focusable()
+            .semantics { contentDescription = "Playback timeline. Use left and right to seek." },
+        contentAlignment = Alignment.BottomStart,
+    ) {
+        val thumbSize = if (focused) 18.dp else 12.dp
+        if (focused) {
+            Box(
+                Modifier.offset(x = (maxWidth - 72.dp) * progress).width(72.dp).height(28.dp)
+                    .background(Color(0xEB17171A), RoundedCornerShape(5.dp)),
+                contentAlignment = Alignment.Center,
+            ) { Text(formatTime(positionMs), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+        }
+        Box(Modifier.fillMaxWidth().height(if (focused) 9.dp else 6.dp).align(Alignment.BottomStart)
+            .background(Color(0xFF67676F), RoundedCornerShape(5.dp))) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(progress)
+                .background(HomeFlixColors.Brand, RoundedCornerShape(5.dp)))
+        }
+        Box(
+            Modifier.offset(x = (maxWidth - thumbSize) * progress).align(Alignment.BottomStart).size(thumbSize)
+                .background(Color.White, CircleShape)
+                .then(if (focused) Modifier.border(3.dp, HomeFlixColors.Brand, CircleShape) else Modifier),
+        )
     }
 }
 
 @Composable
-private fun PlaybackSettings(selectedSpeed: Float, firstFocus: FocusRequester, onSelect: (Float) -> Unit) {
+private fun PlaybackSettings(
+    selectedSpeed: Float,
+    subtitles: List<String>,
+    firstFocus: FocusRequester,
+    onSelect: (Float) -> Unit,
+    onSubtitle: (String?) -> Unit,
+) {
     Box(Modifier.fillMaxSize().background(Color(0xAA000000)), contentAlignment = Alignment.CenterEnd) {
         Column(
             Modifier.fillMaxHeight().width(320.dp).background(Color(0xF21A1A20)).padding(30.dp),
@@ -443,17 +660,43 @@ private fun PlaybackSettings(selectedSpeed: Float, firstFocus: FocusRequester, o
                     Text(if (speed == selectedSpeed) "${speedLabel(speed)}  Selected" else speedLabel(speed))
                 }
             }
+            if (subtitles.isNotEmpty()) {
+                Text("Subtitles", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 22.dp))
+                Button(onClick = { onSubtitle(null) }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                    Text("Off")
+                }
+                subtitles.forEach { language ->
+                    Button(onClick = { onSubtitle(language) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Text(language)
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun SeekIndicator(label: String) {
+private fun SeekIndicator(feedback: SeekFeedback) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Box(
             Modifier.background(Color(0xCC16161B), RoundedCornerShape(12.dp))
-                .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(12.dp)).padding(horizontal = 30.dp, vertical = 18.dp),
-        ) { Text(label, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
+                .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(12.dp)).padding(horizontal = 24.dp, vertical = 15.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Canvas(Modifier.size(30.dp)) {
+                    val start = if (feedback.direction > 0) 215f else -35f
+                    drawArc(Color.White, start, 285f, false, style = Stroke(size.minDimension * .09f))
+                    val x = if (feedback.direction > 0) size.width * .82f else size.width * .18f
+                    drawPath(Path().apply {
+                        moveTo(x, size.height * .14f)
+                        lineTo(x + if (feedback.direction > 0) size.width * .14f else -size.width * .14f, size.height * .28f)
+                        lineTo(x, size.height * .34f); close()
+                    }, Color.White)
+                }
+                Text("${feedback.seconds}s", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
@@ -487,7 +730,7 @@ private fun PlaybackLoading(message: String, overlay: Boolean = false) {
     }
     Box(
         Modifier.fillMaxSize().background(
-            if (overlay) HomeFlixColors.Background.copy(alpha = .72f) else HomeFlixColors.Background,
+            if (overlay) Color.Transparent else HomeFlixColors.Background,
         ),
         contentAlignment = Alignment.Center,
     ) {
@@ -498,7 +741,8 @@ private fun PlaybackLoading(message: String, overlay: Boolean = false) {
                         .background(HomeFlixColors.Brand, CircleShape))
                 }
             }
-            Text(message, fontSize = 20.sp, color = HomeFlixColors.TextSecondary, modifier = Modifier.padding(top = 18.dp))
+            if (!overlay) Text(message, fontSize = 20.sp, color = HomeFlixColors.TextSecondary,
+                modifier = Modifier.padding(top = 18.dp))
         }
     }
 }
@@ -526,4 +770,8 @@ private fun formatTime(milliseconds: Long): String {
 
 private fun speedLabel(speed: Float): String = if (speed == 1f) "Normal" else "${speed}x"
 
-private enum class ControlFocus { PLAY, SETTINGS, FIRST_SETTING }
+private enum class PlayerControlIcon { BACK, REWIND, PLAY, PAUSE, FORWARD, SUBTITLES, SETTINGS }
+
+private data class SeekFeedback(val direction: Int, val seconds: Int)
+
+private enum class ControlFocus { BACK, REWIND, PLAY, FORWARD, SCRUB, SUBTITLES, SETTINGS }

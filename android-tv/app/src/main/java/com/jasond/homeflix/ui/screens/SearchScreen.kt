@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +24,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -37,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.jasond.homeflix.data.model.Movie
 import com.jasond.homeflix.ui.HomeUiState
 import com.jasond.homeflix.ui.HomeViewModel
@@ -65,8 +70,8 @@ fun SearchScreen(
     }
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
         listOf(HomeFlixColors.BackgroundLight, HomeFlixColors.Background, HomeFlixColors.BackgroundDark)))) {
-        Column(Modifier.fillMaxSize().padding(start = 104.dp, top = 52.dp, end = 48.dp)) {
-            Text("Search HomeFlix", fontSize = 34.sp, fontWeight = FontWeight.Black)
+        Column(Modifier.fillMaxSize().padding(start = TvSpacing.ScreenHorizontal, top = 92.dp, end = TvSpacing.ScreenHorizontal)) {
+            Text("Search DS Cinema", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Black)
             SearchField(query, { query = it }, contentFocus)
             when {
                 query.isBlank() -> SearchPrompt()
@@ -82,13 +87,14 @@ fun SearchScreen(
                         color = HomeFlixColors.TextSecondary, fontSize = 16.sp,
                         modifier = Modifier.padding(top = 26.dp, bottom = 10.dp))
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(166.dp),
-                        horizontalArrangement = Arrangement.spacedBy(TvSpacing.CardGap),
-                        verticalArrangement = Arrangement.spacedBy(28.dp),
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 52.dp),
+                        columns = GridCells.Fixed(6),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalArrangement = Arrangement.spacedBy(22.dp),
+                        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 14.dp, bottom = 58.dp),
                     ) {
                         items(results, key = { it.id }) { movie ->
-                            MoviePosterCard(movie, { onMovieSelected(movie.id) })
+                            MoviePosterCard(movie, { onMovieSelected(movie.id) }, cardWidth = 124.dp,
+                                focusedScale = 1.06f)
                         }
                     }
                 }
@@ -156,23 +162,46 @@ fun LibraryGridScreen(
     movies: List<Movie>,
     onMovieSelected: (Long) -> Unit,
     onNavigate: (String) -> Unit,
+    emptyTitle: String = "Nothing here yet",
+    emptyMessage: String = "This section will use your existing library data.",
 ) {
     val contentFocus = remember { FocusRequester() }
+    var lastFocusedId by rememberSaveable(route) { mutableLongStateOf(movies.firstOrNull()?.id ?: -1L) }
+    var focusedMovie by remember { mutableStateOf(movies.firstOrNull()) }
+    val gridState = rememberLazyGridState()
     Box(Modifier.fillMaxSize().background(HomeFlixColors.Background)) {
-        Column(Modifier.fillMaxSize().padding(start = 104.dp, top = 52.dp, end = 48.dp)) {
-            Text(title, fontSize = 34.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(bottom = 26.dp))
-            if (movies.isEmpty()) CenteredState("Nothing here yet", "This section will use your existing library data.")
+        focusedMovie?.let { movie ->
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data(movie.backdropUrl ?: movie.posterUrl)
+                    .size(1280, 720).crossfade(350).build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                alpha = .2f,
+            )
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+                listOf(Color(0x77050506), HomeFlixColors.Background, HomeFlixColors.Background))))
+        }
+        Column(Modifier.fillMaxSize().padding(start = TvSpacing.ScreenHorizontal, top = 92.dp, end = TvSpacing.ScreenHorizontal)) {
+            Text(title, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Black,
+                modifier = Modifier.padding(bottom = 26.dp))
+            if (movies.isEmpty()) CenteredState(emptyTitle, emptyMessage)
             else LazyVerticalGrid(
-                columns = GridCells.Adaptive(166.dp),
-                horizontalArrangement = Arrangement.spacedBy(TvSpacing.CardGap),
-                verticalArrangement = Arrangement.spacedBy(28.dp),
-                contentPadding = PaddingValues(bottom = 52.dp),
+                state = gridState,
+                columns = GridCells.Fixed(6),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(22.dp),
+                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 14.dp, bottom = 58.dp),
             ) {
                 itemsIndexed(movies, key = { _, movie -> movie.id }) { index, movie ->
                     MoviePosterCard(
                         movie,
                         { onMovieSelected(movie.id) },
-                        modifier = if (index == 0) Modifier.focusRequester(contentFocus) else Modifier,
+                        modifier = if (movie.id == lastFocusedId || lastFocusedId == -1L && index == 0)
+                            Modifier.focusRequester(contentFocus) else Modifier,
+                        cardWidth = 124.dp,
+                        focusedScale = 1.06f,
+                        onFocused = { lastFocusedId = movie.id; focusedMovie = movie },
                     )
                 }
             }
