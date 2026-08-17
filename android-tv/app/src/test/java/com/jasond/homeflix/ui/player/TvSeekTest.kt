@@ -6,8 +6,8 @@ import org.junit.Test
 class TvSeekTest {
     @Test fun `seek accelerates for held remote key`() {
         assertEquals(10_000L, seekStepMs(0))
-        assertEquals(30_000L, seekStepMs(5))
-        assertEquals(60_000L, seekStepMs(12))
+        assertEquals(20_000L, seekStepMs(5))
+        assertEquals(30_000L, seekStepMs(12))
     }
 
     @Test fun `seek target is clamped to playable timeline`() {

@@ -1,23 +1,25 @@
 package com.jasond.homeflix.ui.components
 
-import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,74 +30,91 @@ import androidx.tv.material3.Text
 import com.jasond.homeflix.R
 import com.jasond.homeflix.ui.theme.HomeFlixColors
 import com.jasond.homeflix.ui.theme.TvMotion
+import com.jasond.homeflix.ui.theme.TvSpacing
 
-data class SidebarItem(val route: String, val glyph: String, val label: String)
+data class NavigationItem(val route: String, val icon: TvIcon, val label: String)
 
-val HomeFlixSidebarItems = listOf(
-    SidebarItem("home", "H", "Home"),
-    SidebarItem("search", "S", "Search"),
-    SidebarItem("movies", "M", "Movies"),
-    SidebarItem("my-list", "+", "My List"),
-    SidebarItem("settings", "*", "Settings"),
+val HomeFlixNavigationItems = listOf(
+    NavigationItem("home", TvIcon.HOME, "Home"),
+    NavigationItem("movies", TvIcon.MOVIES, "Movies"),
+    NavigationItem("my-list", TvIcon.BOOKMARK, "My List"),
+    NavigationItem("search", TvIcon.SEARCH, "Search"),
+    NavigationItem("settings", TvIcon.SETTINGS, "Settings"),
 )
 
+/** Kept under the original function name so screen call sites remain source compatible. */
 @Composable
 fun SidebarNavigation(
     selectedRoute: String,
     onNavigate: (String) -> Unit,
-    onExitToContent: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onExitToContent: () -> Unit = {},
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val width by animateDpAsState(if (expanded) 238.dp else 76.dp, tween(TvMotion.FocusMillis), label = "sidebar")
-    BackHandler(enabled = expanded) { expanded = false }
-    Column(
-        modifier.width(width).fillMaxHeight().zIndex(10f)
-            .onFocusChanged { expanded = it.hasFocus }
-            .onPreviewKeyEvent { event ->
-                if (event.key == Key.DirectionRight && event.type == KeyEventType.KeyDown) {
-                    onExitToContent()
-                    true
-                } else false
-            }
-            .background(
-                Brush.horizontalGradient(
-                    listOf(Color(0xF2030B1B), Color(0xE6030B1B), Color(0x00030B1B)),
-                ),
-            )
-            .padding(start = 12.dp, end = if (expanded) 22.dp else 12.dp, top = 34.dp, bottom = 30.dp),
+    Row(
+        modifier.fillMaxWidth().height(TvSpacing.NavigationHeight).zIndex(20f)
+            .background(Brush.verticalGradient(listOf(Color(0xF2050506), Color(0xC9050506), Color.Transparent)))
+            .padding(start = TvSpacing.ScreenHorizontal, end = TvSpacing.ScreenHorizontal, top = 10.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(48.dp)) {
-            Image(
-                painterResource(R.drawable.ds_app_icon),
-                "DS Home Flix logo",
-                Modifier.size(42.dp),
-            )
-            if (expanded) Text("DS CINEMA", fontWeight = FontWeight.Black, fontSize = 19.sp,
-                modifier = Modifier.padding(start = 12.dp))
-        }
-        Spacer(Modifier.weight(1f))
-        HomeFlixSidebarItems.forEach { item ->
-            val selected = item.route == selectedRoute
-            Button(
-                onClick = { onNavigate(item.route) },
-                modifier = Modifier.fillMaxWidth().height(52.dp).padding(vertical = 2.dp),
-                colors = ButtonDefaults.colors(
-                    containerColor = if (selected) Color(0xCC34343A) else Color.Transparent,
-                    contentColor = HomeFlixColors.TextPrimary,
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp),
-            ) {
-                Box(Modifier.width(30.dp), contentAlignment = Alignment.CenterStart) {
-                    Text(item.glyph, fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                        color = if (selected) HomeFlixColors.Brand else HomeFlixColors.TextPrimary)
-                }
-                if (expanded) Text(item.label, fontSize = 17.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    modifier = Modifier.weight(1f).padding(start = 10.dp))
+        Image(painterResource(R.drawable.ds_app_icon), "DS Cinema", Modifier.size(42.dp))
+        Spacer(Modifier.width(30.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            HomeFlixNavigationItems.forEach { item ->
+                NavigationButton(item, item.route == selectedRoute, onNavigate, onExitToContent)
             }
         }
-        Spacer(Modifier.weight(1.15f))
-        if (expanded) Text("Personal streaming", fontSize = 12.sp, color = HomeFlixColors.TextSecondary,
-            modifier = Modifier.padding(start = 12.dp))
+    }
+}
+
+@Composable
+private fun NavigationButton(
+    item: NavigationItem,
+    selected: Boolean,
+    onNavigate: (String) -> Unit,
+    onExitToContent: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    var initialFocusRequested by rememberSaveable(item.route) { mutableStateOf(false) }
+    val requester = remember { FocusRequester() }
+    LaunchedEffect(selected) {
+        if (selected && !initialFocusRequested) {
+            withFrameNanos { }
+            requester.requestFocus()
+            initialFocusRequested = true
+        }
+    }
+    val width by animateDpAsState(if (focused) 126.dp else 48.dp, tween(TvMotion.FocusMillis), label = "nav width")
+    Box(contentAlignment = Alignment.BottomCenter) {
+        Button(
+            onClick = { onNavigate(item.route) },
+            modifier = Modifier.width(width).height(44.dp)
+                .then(if (selected) Modifier.focusRequester(requester) else Modifier)
+                .onFocusChanged { focused = it.isFocused }
+                .onPreviewKeyEvent { event ->
+                    if (event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown) {
+                        onExitToContent(); true
+                    } else false
+                },
+            colors = ButtonDefaults.colors(
+                containerColor = if (focused) Color(0xD9343439) else Color.Transparent,
+                contentColor = Color.White,
+                focusedContainerColor = Color(0xEE343439),
+                focusedContentColor = Color.White,
+            ),
+            shape = ButtonDefaults.shape(shape = RoundedCornerShape(5.dp)),
+            contentPadding = PaddingValues(horizontal = 11.dp),
+        ) {
+            TvVectorIcon(item.icon, Modifier.size(23.dp), if (selected) HomeFlixColors.Brand else Color.White)
+            AnimatedVisibility(
+                visible = focused,
+                enter = fadeIn(tween(TvMotion.FocusMillis)),
+                exit = fadeOut(tween(120)),
+            ) {
+                Text(item.label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, modifier = Modifier.padding(start = 9.dp))
+            }
+        }
+        if (selected) Box(Modifier.padding(bottom = 1.dp).width(if (focused) 44.dp else 20.dp).height(2.dp)
+            .background(HomeFlixColors.Brand, RoundedCornerShape(1.dp)))
     }
 }

@@ -26,7 +26,16 @@ private fun subtitleConfiguration(subtitle: Subtitle): MediaItem.SubtitleConfigu
     return MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(subtitle.url))
         .setMimeType(mimeType)
         .setLabel(subtitle.language)
+        .setLanguage(subtitleLanguageCode(subtitle.language))
         .setId(subtitle.id.toString())
         .setSelectionFlags(if (subtitle.isDefault) C.SELECTION_FLAG_DEFAULT else 0)
         .build()
+}
+
+fun subtitleLanguageCode(label: String): String = when (label.lowercase()) {
+    "english" -> "en"
+    "filipino", "tagalog" -> "tl"
+    "spanish" -> "es"
+    "french" -> "fr"
+    else -> label.lowercase().take(3)
 }

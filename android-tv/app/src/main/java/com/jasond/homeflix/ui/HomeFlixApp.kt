@@ -31,6 +31,7 @@ import com.jasond.homeflix.ui.screens.SplashScreen
 import com.jasond.homeflix.ui.theme.TvMotion
 import com.jasond.homeflix.data.HomeRepository
 import com.jasond.homeflix.data.ServerPreferences
+import com.jasond.homeflix.data.MyListStore
 import com.jasond.homeflix.data.remote.ApiClient
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.withTimeout
@@ -76,7 +77,7 @@ fun HomeFlixApp() {
                 object : ViewModelProvider.Factory {
                     @Suppress("UNCHECKED_CAST")
                     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                        HomeViewModel(HomeRepository(ApiClient.service)) as T
+                        HomeViewModel(HomeRepository(ApiClient.service), MyListStore(context)) as T
                 }
             }
             val homeViewModel: HomeViewModel = viewModel(key = "home-${sessionServerUrl.orEmpty()}", factory = factory)
@@ -90,9 +91,13 @@ private fun HomeFlixLibrary(homeViewModel: HomeViewModel) {
     val navController = rememberNavController()
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val movies = (homeState as? HomeUiState.Success)?.movies.orEmpty()
+    val myListIds by homeViewModel.myListIds.collectAsStateWithLifecycle()
     val navigateSidebar: (String) -> Unit = { route ->
-        if (route == "home") navController.popBackStack("home", inclusive = false)
-        else navController.navigate(route) { launchSingleTop = true }
+        navController.navigate(route) {
+            popUpTo("home") { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
     }
     NavHost(
         navController = navController,
@@ -107,6 +112,8 @@ private fun HomeFlixLibrary(homeViewModel: HomeViewModel) {
                 viewModel = homeViewModel,
                 onMovieSelected = { movieId -> navController.navigate("details/$movieId") },
                 onPlayMovie = { movieId -> navController.navigate("player/$movieId?startOver=false") },
+                myListIds = myListIds,
+                onToggleMyList = homeViewModel::toggleMyList,
                 onNavigate = navigateSidebar,
             )
         }
@@ -117,10 +124,15 @@ private fun HomeFlixLibrary(homeViewModel: HomeViewModel) {
             LibraryGridScreen("movies", "Movies", movies, { navController.navigate("details/$it") }, navigateSidebar)
         }
         composable("my-list") {
-            LibraryGridScreen("my-list", "My List", emptyList(), { navController.navigate("details/$it") }, navigateSidebar)
+            LibraryGridScreen("my-list", "My List", movies.filter { it.id in myListIds },
+                { navController.navigate("details/$it") }, navigateSidebar)
         }
         composable("settings") {
-            LibraryGridScreen("settings", "Settings", emptyList(), { navController.navigate("details/$it") }, navigateSidebar)
+            LibraryGridScreen(
+                "settings", "Settings", emptyList(), { navController.navigate("details/$it") }, navigateSidebar,
+                emptyTitle = "More settings coming soon",
+                emptyMessage = "DS Cinema settings will appear here as they become available.",
+            )
         }
         composable(
             route = "details/{movieId}",
@@ -132,6 +144,8 @@ private fun HomeFlixLibrary(homeViewModel: HomeViewModel) {
                 movie = homeViewModel.movieById(movieId),
                 progress = progress[movieId],
                 relatedMovies = homeViewModel.relatedMovies(movieId),
+                isInMyList = movieId in myListIds,
+                onToggleMyList = { homeViewModel.toggleMyList(movieId) },
                 onLoadProgress = { homeViewModel.loadProgress(movieId) },
                 onPlayMovie = { id, startOver -> navController.navigate("player/$id?startOver=$startOver") },
                 onMovieSelected = { id -> navController.navigate("details/$id") },

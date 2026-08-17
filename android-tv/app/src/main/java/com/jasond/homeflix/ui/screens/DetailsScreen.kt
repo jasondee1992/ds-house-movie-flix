@@ -29,6 +29,8 @@ import coil.request.ImageRequest
 import com.jasond.homeflix.data.model.Movie
 import com.jasond.homeflix.data.model.PlaybackProgress
 import com.jasond.homeflix.ui.components.MovieRow
+import com.jasond.homeflix.ui.components.TvIcon
+import com.jasond.homeflix.ui.components.TvVectorIcon
 import com.jasond.homeflix.ui.format.audioChannelLabel
 import com.jasond.homeflix.ui.format.formatRuntime
 import com.jasond.homeflix.ui.theme.HomeFlixColors
@@ -39,6 +41,8 @@ fun DetailsScreen(
     movie: Movie?,
     progress: PlaybackProgress?,
     relatedMovies: List<Movie>,
+    isInMyList: Boolean,
+    onToggleMyList: () -> Unit,
     onLoadProgress: () -> Unit,
     onPlayMovie: (Long, Boolean) -> Unit,
     onMovieSelected: (Long) -> Unit,
@@ -80,7 +84,7 @@ fun DetailsScreen(
                     enter = fadeIn(tween(500)) + slideInHorizontally(tween(500)) { -it / 10 },
                     modifier = Modifier.align(Alignment.CenterStart),
                 ) {
-                    DetailsHeader(movie, progress, playFocus, onPlayMovie, onBack)
+                    DetailsHeader(movie, progress, playFocus, isInMyList, onToggleMyList, onPlayMovie, onBack)
                 }
             }
         }
@@ -101,13 +105,15 @@ private fun DetailsHeader(
     movie: Movie,
     progress: PlaybackProgress?,
     playFocus: FocusRequester,
+    isInMyList: Boolean,
+    onToggleMyList: () -> Unit,
     onPlayMovie: (Long, Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth(.62f).padding(start = 72.dp, top = 46.dp)) {
-        Text("HOMEFLIX FEATURE", color = HomeFlixColors.Brand, fontSize = 14.sp,
+    Column(Modifier.fillMaxWidth(.6f).padding(start = 72.dp, top = 52.dp)) {
+        Text("DS CINEMA", color = HomeFlixColors.Brand, fontSize = 14.sp,
             fontWeight = FontWeight.Bold, letterSpacing = 1.7.sp)
-        Text(movie.title, fontSize = 52.sp, lineHeight = 55.sp, fontWeight = FontWeight.Black,
+        Text(movie.title, color = Color.White, fontSize = 52.sp, lineHeight = 55.sp, fontWeight = FontWeight.Black,
             maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 12.dp))
         MetadataRow(movie)
         Text(
@@ -133,16 +139,31 @@ private fun DetailsHeader(
         )
         if (technical.isNotEmpty()) Text(technical.joinToString("   |   "), color = HomeFlixColors.TextSecondary,
             fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
-        if (progress?.canResume == true) Text("${progress.progressPercent.toInt()}% watched",
-            color = HomeFlixColors.TextSecondary, fontSize = 15.sp, modifier = Modifier.padding(top = 12.dp))
+        if (progress?.canResume == true) {
+            val minutesLeft = ((progress.durationMs - progress.positionMs).coerceAtLeast(0) / 60_000)
+            Text(if (minutesLeft > 0) "$minutesLeft min remaining" else "${progress.progressPercent.toInt()}% watched",
+                color = HomeFlixColors.TextSecondary, fontSize = 15.sp, modifier = Modifier.padding(top = 12.dp))
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 27.dp)) {
             Button(
                 onClick = { onPlayMovie(movie.id, false) },
                 modifier = Modifier.focusRequester(playFocus),
                 colors = ButtonDefaults.colors(containerColor = Color.White, contentColor = Color.Black),
-            ) { Text(if (progress?.canResume == true) "RESUME" else "PLAY", fontWeight = FontWeight.Black) }
+            ) {
+                TvVectorIcon(TvIcon.PLAY, Modifier.size(20.dp), Color.Black)
+                Text(if (progress?.canResume == true) "RESUME" else "PLAY", fontWeight = FontWeight.Black,
+                    modifier = Modifier.padding(start = 9.dp))
+            }
             if (progress?.canResume == true) Button(onClick = { onPlayMovie(movie.id, true) }) { Text("START OVER") }
-            Button(onClick = onBack, colors = ButtonDefaults.colors(containerColor = Color(0xD947474D))) { Text("BACK") }
+            Button(onClick = onToggleMyList, colors = ButtonDefaults.colors(containerColor = Color(0xD947474D))) {
+                TvVectorIcon(TvIcon.BOOKMARK, Modifier.size(20.dp),
+                    if (isInMyList) HomeFlixColors.Brand else Color.White)
+                Text(if (isInMyList) "IN MY LIST" else "MY LIST", modifier = Modifier.padding(start = 8.dp))
+            }
+            Button(onClick = onBack, colors = ButtonDefaults.colors(containerColor = Color(0xD947474D))) {
+                TvVectorIcon(TvIcon.BACK, Modifier.size(20.dp))
+                Text("BACK", modifier = Modifier.padding(start = 8.dp))
+            }
         }
     }
 }
