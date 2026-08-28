@@ -112,6 +112,9 @@ private fun PlaybackPlayer(
     var leaving by remember { mutableStateOf(false) }
     var focusedControl by remember { mutableStateOf(ControlFocus.PLAY) }
     var menuReturnFocus by remember { mutableStateOf(ControlFocus.SETTINGS) }
+    var selectedSubtitleLanguage by remember(movie.id) {
+        mutableStateOf(movie.subtitles.firstOrNull { it.isDefault }?.language)
+    }
     val surfaceFocus = remember { FocusRequester() }
     val backFocus = remember { FocusRequester() }
     val rewindFocus = remember { FocusRequester() }
@@ -373,6 +376,8 @@ private fun PlaybackPlayer(
             PlaybackSettings(
                 selectedSpeed = player.playbackParameters.speed,
                 subtitles = movie.subtitles.map { it.language }.distinct(),
+                selectedSubtitle = selectedSubtitleLanguage,
+                showPlaybackSpeed = menuReturnFocus == ControlFocus.SETTINGS,
                 firstFocus = firstSettingFocus,
                 onSelect = { speed ->
                     player.setPlaybackSpeed(speed)
@@ -385,6 +390,7 @@ private fun PlaybackPlayer(
                         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, language == null)
                         .setPreferredTextLanguage(language?.let(::subtitleLanguageCode))
                         .build()
+                    selectedSubtitleLanguage = language
                     settingsVisible = false
                     focusedControl = ControlFocus.SUBTITLES
                     touchControls()
@@ -517,12 +523,11 @@ private fun PlayerIconButton(
         onClick = { onInteraction(); onClick() },
         modifier = modifier.size(size).scale(focusScale)
             .onFocusChanged { state -> focused = state.isFocused; if (state.isFocused) onFocused() }
-            .then(if (focused) Modifier.border(2.dp, HomeFlixColors.Brand, CircleShape) else Modifier)
             .semantics { contentDescription = label },
         contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.colors(
-            containerColor = Color(0xB326262B),
-            focusedContainerColor = Color(0xF2505057),
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent,
             contentColor = Color(0xFFD7D7DB),
             focusedContentColor = Color.White,
         ),
@@ -641,6 +646,8 @@ private fun PlaybackProgress(
 private fun PlaybackSettings(
     selectedSpeed: Float,
     subtitles: List<String>,
+    selectedSubtitle: String?,
+    showPlaybackSpeed: Boolean,
     firstFocus: FocusRequester,
     onSelect: (Float) -> Unit,
     onSubtitle: (String?) -> Unit,
@@ -650,25 +657,38 @@ private fun PlaybackSettings(
             Modifier.fillMaxHeight().width(320.dp).background(Color(0xF21A1A20)).padding(30.dp),
             verticalArrangement = Arrangement.Center,
         ) {
-            Text("Playback speed", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            listOf(.75f, 1f, 1.25f, 1.5f).forEachIndexed { index, speed ->
-                Button(
-                    onClick = { onSelect(speed) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                        .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier),
-                ) {
-                    Text(if (speed == selectedSpeed) "${speedLabel(speed)}  Selected" else speedLabel(speed))
+            if (showPlaybackSpeed) {
+                Text("Playback speed", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                listOf(.75f, 1f, 1.25f, 1.5f).forEachIndexed { index, speed ->
+                    Button(
+                        onClick = { onSelect(speed) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                            .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier),
+                    ) {
+                        Text(if (speed == selectedSpeed) "${speedLabel(speed)}  Selected" else speedLabel(speed))
+                    }
                 }
-            }
-            if (subtitles.isNotEmpty()) {
+            } else {
                 Text("Subtitles", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 22.dp))
-                Button(onClick = { onSubtitle(null) }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                    Text("Off")
+                    modifier = Modifier.padding(bottom = 2.dp))
+                Button(
+                    onClick = { onSubtitle(null) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp).focusRequester(firstFocus),
+                ) {
+                    Text(if (selectedSubtitle == null) "Off  Selected" else "Off")
                 }
-                subtitles.forEach { language ->
-                    Button(onClick = { onSubtitle(language) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Text(language)
+                if (subtitles.isEmpty()) {
+                    Text(
+                        "No subtitles available for this movie",
+                        color = Color.LightGray,
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(top = 18.dp),
+                    )
+                } else {
+                    subtitles.forEach { language ->
+                        Button(onClick = { onSubtitle(language) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            Text(if (language == selectedSubtitle) "$language  On" else language)
+                        }
                     }
                 }
             }

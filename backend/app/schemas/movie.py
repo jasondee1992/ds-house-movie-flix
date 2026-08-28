@@ -38,6 +38,19 @@ class MovieResponse(BaseModel):
     subtitles: list[SubtitleResponse]
 
 
+class MovieCardResponse(BaseModel):
+    """Small payload used by TV rails; full metadata stays on the detail endpoint."""
+
+    id: int
+    title: str
+    year: int | None
+    duration_seconds: int | None
+    genre: str | None
+    poster_url: str
+    backdrop_url: str
+    quality: str | None
+
+
 class ScanResponse(BaseModel):
     status: str
     scanned_files: int

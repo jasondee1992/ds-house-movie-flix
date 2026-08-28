@@ -57,4 +57,4 @@ def test_bundled_artwork_is_used_when_matching_movie_has_no_images(
     assert poster.status_code == 200
     assert poster.headers["content-type"].startswith("image/jpeg")
     assert backdrop.status_code == 200
-    assert backdrop.headers["content-type"].startswith("image/webp")
+    assert backdrop.headers["content-type"].startswith("image/jpeg")

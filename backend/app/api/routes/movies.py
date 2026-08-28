@@ -1,14 +1,14 @@
 from pathlib import Path
 import mimetypes
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.dependencies import get_session
 from app.models.movie import Movie, Subtitle
-from app.schemas.movie import MovieResponse, SubtitleResponse
+from app.schemas.movie import MovieCardResponse, MovieResponse, SubtitleResponse
 from app.services.media_stream import (ByteRange, InvalidRange, iter_file_range, parse_range_header,
     resolve_trusted_file, subtitle_content_type, video_content_type)
 from app.services.artwork_catalog import bundled_artwork
@@ -46,13 +46,38 @@ def to_response(movie: Movie) -> MovieResponse:
     )
 
 
+def to_card_response(movie: Movie) -> MovieCardResponse:
+    return MovieCardResponse(
+        id=movie.id, title=movie.title, year=movie.year,
+        duration_seconds=movie.duration_seconds, genre=movie.genre,
+        poster_url=f"/api/movies/{movie.id}/poster",
+        backdrop_url=f"/api/movies/{movie.id}/backdrop",
+        quality=quality_label(movie.video_width, movie.video_height),
+    )
+
+
 def _movie_query():
     return select(Movie).options(selectinload(Movie.subtitles))
 
 
 @router.get("", response_model=list[MovieResponse])
-def list_movies(session: Session = Depends(get_session)) -> list[MovieResponse]:
-    movies = session.scalars(_movie_query().order_by(Movie.title.collate("NOCASE"))).all()
+def list_movies(response: Response, q: str | None = Query(None, max_length=200),
+                genre: str | None = Query(None, max_length=100),
+                limit: int | None = Query(None, ge=1, le=100),
+                offset: int = Query(0, ge=0),
+                session: Session = Depends(get_session)) -> list[MovieResponse]:
+    query = _movie_query()
+    if q and (term := q.strip()):
+        query = query.where(Movie.title.ilike(f"%{term}%"))
+    if genre and (genre_term := genre.strip()):
+        query = query.where(Movie.genre.ilike(f"%{genre_term}%"))
+    query = query.order_by(Movie.title.collate("NOCASE")).offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+    movies = session.scalars(query).all()
+    response.headers["Cache-Control"] = "private, max-age=30, stale-while-revalidate=120"
+    response.headers["X-Result-Count"] = str(len(movies))
+    response.headers["X-Next-Offset"] = str(offset + len(movies)) if limit and len(movies) == limit else ""
     return [to_response(movie) for movie in movies]
 
 
