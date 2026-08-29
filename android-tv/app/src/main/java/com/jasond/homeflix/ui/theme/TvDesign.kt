@@ -26,10 +26,10 @@ object TvSpacing {
 }
 
 object TvMotion {
-    const val FocusMillis = 180
-    const val ScreenMillis = 220
-    const val HeroCrossfadeMillis = 380
-    const val FocusSettleMillis = 140L
+    const val FocusMillis = 100
+    const val ScreenMillis = 120
+    const val HeroCrossfadeMillis = 180
+    const val FocusSettleMillis = 100L
     const val HeroRotationMillis = 10_000L
 }
 

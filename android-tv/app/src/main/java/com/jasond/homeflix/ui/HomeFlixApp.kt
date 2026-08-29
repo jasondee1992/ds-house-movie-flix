@@ -9,8 +9,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.tween
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModel
@@ -102,8 +100,8 @@ private fun HomeFlixLibrary(homeViewModel: HomeViewModel) {
     NavHost(
         navController = navController,
         startDestination = "home",
-        enterTransition = { fadeIn(tween(TvMotion.ScreenMillis)) + scaleIn(tween(TvMotion.ScreenMillis), initialScale = .985f) },
-        exitTransition = { fadeOut(tween(TvMotion.ScreenMillis)) + scaleOut(tween(TvMotion.ScreenMillis), targetScale = 1.015f) },
+        enterTransition = { fadeIn(tween(TvMotion.ScreenMillis)) },
+        exitTransition = { fadeOut(tween(TvMotion.ScreenMillis)) },
         popEnterTransition = { fadeIn(tween(TvMotion.ScreenMillis)) },
         popExitTransition = { fadeOut(tween(TvMotion.ScreenMillis)) },
     ) {
@@ -161,8 +159,8 @@ private fun HomeFlixLibrary(homeViewModel: HomeViewModel) {
         ) { entry ->
             val movieId = entry.arguments?.getLong("movieId") ?: -1L
             PlayerScreen(movie = homeViewModel.movieById(movieId), onBack = {
-                homeViewModel.loadMovies()
                 navController.popBackStack()
+                homeViewModel.refreshAfterPlayback()
             })
         }
     }

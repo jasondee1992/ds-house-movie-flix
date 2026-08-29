@@ -69,7 +69,7 @@ fun DetailsScreen(
             Box(Modifier.fillMaxWidth().height(700.dp)) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(movie.backdropUrl ?: movie.posterUrl).crossfade(450).build(),
+                        .data(movie.backdropUrl ?: movie.posterUrl).crossfade(120).build(),
                     contentDescription = "${movie.title} backdrop",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -81,7 +81,7 @@ fun DetailsScreen(
                     listOf(Color.Transparent, Color(0x55070708), HomeFlixColors.Background))))
                 AnimatedVisibility(
                     visible = visible,
-                    enter = fadeIn(tween(500)) + slideInHorizontally(tween(500)) { -it / 10 },
+                    enter = fadeIn(tween(180)) + slideInHorizontally(tween(180)) { -it / 16 },
                     modifier = Modifier.align(Alignment.CenterStart),
                 ) {
                     DetailsHeader(movie, progress, playFocus, isInMyList, onToggleMyList, onPlayMovie, onBack)

@@ -49,6 +49,8 @@ class HomeViewModel(
 
     fun loadMovies() = refreshMovies(showLoading = true, scanBefore = false)
 
+    fun refreshAfterPlayback() = refreshMovies(showLoading = false, scanBefore = false)
+
     private fun refreshMovies(showLoading: Boolean, scanBefore: Boolean = true) {
         if (showLoading) {
             _uiState.value = HomeUiState.Loading

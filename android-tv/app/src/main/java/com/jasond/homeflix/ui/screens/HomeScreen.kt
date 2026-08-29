@@ -178,7 +178,7 @@ private fun HeroBanner(
     }
     Box(Modifier.fillMaxWidth().height(height).background(HomeFlixColors.Background)) {
         AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current).data(image).crossfade(500).build(),
+            model = ImageRequest.Builder(LocalContext.current).data(image).crossfade(120).build(),
             contentDescription = "${movie.title} featured backdrop",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
